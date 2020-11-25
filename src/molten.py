@@ -21,8 +21,8 @@ class Molten(MoltenAgent):
         ball_to_foe = ball_location - agent.foes[0].location
         foe_distance = ball_to_foe.magnitude()
 
-        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)[0]
-        foe_eta = eta(agent.foes[0], ball_location, ball_to_foe.normalize(), foe_distance)[0]
+        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)
+        foe_eta = eta(agent.foes[0], ball_location, ball_to_foe.normalize(), foe_distance)
 
         shot_incoming = (my_goal_location - (ball_location + agent.foes[0].velocity + agent.ball.velocity)).magnitude() < 4000
 
@@ -48,8 +48,8 @@ class Molten(MoltenAgent):
         ball_to_friend = ball_location - agent.friends[0].location
         friend_distance = ball_to_friend.magnitude()
 
-        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)[0]
-        friend_eta = eta(agent.friends[0], ball_location, ball_to_friend.normalize(), friend_distance)[0]
+        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)
+        friend_eta = eta(agent.friends[0], ball_location, ball_to_friend.normalize(), friend_distance)
 
         my_goal_location = agent.friend_goal.location
         my_goal_distance_to_me = (my_goal_location - agent.me.location).magnitude()
@@ -68,8 +68,8 @@ class Molten(MoltenAgent):
         ball_to_foe_one = ball_location - agent.foes[0].location
         ball_to_foe_two = ball_location - agent.foes[1].location
 
-        foe_one_eta = eta(agent.foes[0], ball_location, ball_to_foe_one.normalize(), ball_to_foe_one.magnitude())[0]
-        foe_two_eta = eta(agent.foes[1], ball_location, ball_to_foe_two.normalize(), ball_to_foe_two.magnitude())[0]
+        foe_one_eta = eta(agent.foes[0], ball_location, ball_to_foe_one.normalize(), ball_to_foe_one.magnitude())
+        foe_two_eta = eta(agent.foes[1], ball_location, ball_to_foe_two.normalize(), ball_to_foe_two.magnitude())
 
         foe_goal_distance_to_foe_one = (agent.foe_goal.location - agent.foes[0].location).magnitude()
         foe_goal_distance_to_foe_two = (agent.foe_goal.location - agent.foes[1].location).magnitude()

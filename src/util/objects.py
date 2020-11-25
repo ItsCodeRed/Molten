@@ -261,6 +261,9 @@ class Vector3:
     @z.setter
     def z(self,value):
         self.data[2] = value
+    @property
+    def zero(self):
+        return Vector3(0, 0, 0)
     def __getitem__(self,key):
         #To access a single value in a Vector3, treat it like a list
         # ie: to get the first (x) value use: Vector3[0]
@@ -369,3 +372,23 @@ class Vector3:
         if start.dot(s) < end.dot(s):
             return end
         return start
+    def clamp3D(self, bottom_left, top_right, return_target=False):
+        #Similar to integer clamping, Vector3's clamp() forces the Vector3's direction between a start and end Vector3
+        #Such that left < Vector3 < right in terms of clockwise rotation
+        #Will also limit angle in the vertical direction. Such that top < Vector3 < bottom
+        s = self.normalize()
+        v1 = self.clamp(bottom_left.normalize(), top_right.normalize()).flatten().normalize() * self.flatten().magnitude()
+        v2 = (top_right - bottom_left).flatten()
+        p2 = bottom_left.flatten()
+        if (v1.cross(v2).angle3D(p2.cross(v2)) == math.pi or v1.cross(v2).angle3D(p2.cross(v2)) == 0) and v1.cross(v2) != Vector3.zero:
+            direction = v1 + Vector3(0, 0, self.z)
+            target = direction * (p2.cross(v2).magnitude() / v1.cross(v2).magnitude())
+            target.z = target.z if bottom_left.z < target.z < top_right.z else top_right.z if top_right.z < target.z else bottom_left.z
+
+            return target.normalize(), target if return_target else target.normalize()
+        else:
+            right = s.dot(top_right.normalize().cross((0,0,-1))) < 0
+            left = s.dot(bottom_left.normalize().cross((0,0,-1))) > 0
+            if bottom_left.normalize().dot(s) < top_right.normalize().dot(s):
+                return top_right.normalize(), top_right if return_target else top_right.normalize()
+            return bottom_left.normalize(), bottom_left if return_target else bottom_left.normalize()

@@ -11,7 +11,7 @@ def find_acceleration(target, car, time, gravity = 650):
 
 def perdict_car_location(car, time, gravity = 650):
     #Finds the cars location after a certain amount of time
-    return car.location + car.velocity * time + 0.5 * gravity * time ** 2
+    return car.location + car.velocity * time + 0.5 * Vector3(0, 0, -gravity) * time ** 2
 
 def eta(car, target, direction, distance):
     car_to_target = target - car.location
@@ -36,28 +36,28 @@ def eta(car, target, direction, distance):
         time_until_max = (2300 - int_velocity) / boosted_acceleration
         distance_covered = int_velocity * time_until_max + (1/2) * boosted_acceleration * math.pow(time_until_max, 2)
         if distance_covered < distance:
-            return time_until_max + (distance - distance_covered) / 2300, True
+            return time_until_max + (distance - distance_covered) / 2300
         else:
             final_velocity = math.sqrt(math.pow(int_velocity, 2) + 2 * boosted_acceleration * distance)
-            return (final_velocity - int_velocity) / boosted_acceleration, True
+            return (final_velocity - int_velocity) / boosted_acceleration
     else:
         max_speed = cap(final_boost_velocity, 1410, 2300)
 
         if distance_with_boost > distance:
             final_velocity = math.sqrt(math.pow(int_velocity, 2) + 2 * boosted_acceleration * distance)
-            return (final_velocity - int_velocity) / boosted_acceleration, True
+            return (final_velocity - int_velocity) / boosted_acceleration
         else:
             if final_boost_velocity < 1410:
                 time_until_max = (1410 - final_boost_velocity) / driving_acceleration
                 distance_covered = final_boost_velocity * time_until_max + (1/2) * driving_acceleration * math.pow(time_until_max, 2)
                 if distance_covered + distance_with_boost < distance:
-                    return time_until_no_boost + time_until_max + (distance - distance_with_boost - distance_covered) / 1410, True
+                    return time_until_no_boost + time_until_max + (distance - distance_with_boost - distance_covered) / 1410
                 else:
                     final_velocity = math.sqrt(math.pow(final_boost_velocity, 2) + 2 * driving_acceleration * (distance - distance_with_boost))
-                    return time_until_no_boost + (final_velocity - int_velocity) / driving_acceleration, True
+                    return time_until_no_boost + (final_velocity - int_velocity) / driving_acceleration
             else:
                 distance_remaining = distance - distance_with_boost
-                return time_until_no_boost + (distance_remaining / max_speed), True
+                return time_until_no_boost + (distance_remaining / max_speed)
 
 def cap(x, low, high):
     #caps/clamps a number between a low and high value
@@ -146,22 +146,10 @@ def find_jump_time(height, double_jump=False):
     if height_after_jump < height:
         int_velocity_after_jump = double_jump_multiplier * int_jump_velocity + (gravity_acceleration + jump_acceleration) * jump_stop_time
         fin_velocity_after_jump = pom_sqrt(math.pow(int_velocity_after_jump, 2) + 2 * gravity_acceleration * (height - height_after_jump))
-        return 0.05 + jump_stop_time + (fin_velocity_after_jump - int_velocity_after_jump) / gravity_acceleration
+        return jump_stop_time + (fin_velocity_after_jump - int_velocity_after_jump) / gravity_acceleration
     else:
         fin_jump_velocity = math.sqrt(math.pow(int_jump_velocity, 2) + 2 * (gravity_acceleration + jump_acceleration) * height)
         return (fin_jump_velocity - int_jump_velocity) / (gravity_acceleration + jump_acceleration)
-
-def length_by_angle(angle):
-    if angle < math.pi / 2:
-        length = 84.3
-        default_angle = math.atan(73/42)
-        new_angle = default_angle + abs(angle)
-        return math.sin(new_angle) * length, math.cos(new_angle) * length
-    else:
-        length = 65.299
-        default_angle = math.atan(-50/42)
-        new_angle = default_angle + abs(angle)
-        return math.sin(new_angle) * length, math.cos(new_angle) * length
 
 def default_orient(agent, local_target, direction = 1.0):
     #points the car towards a given local target.
@@ -183,11 +171,20 @@ def default_orient(agent, local_target, direction = 1.0):
 def default_throttle(agent, target_speed, direction = 1.0):
     #accelerates the car to a desired speed using throttle and boost
     car_speed = agent.me.local(agent.me.velocity)[0]
-    t = (target_speed * direction) - car_speed
-    agent.controller.throttle = cap((t**2) * sign(t)/1000, -1.0, 1.0)
-    agent.controller.boost = True if t > 150 and car_speed < 2275 and agent.controller.throttle == 1.0 else False
+    speed_difference = (target_speed * direction) - car_speed
+    agent.controller.throttle = cap((speed_difference**2) * sign(speed_difference)/1000, -1.0, 1.0)
+    agent.controller.boost = True if speed_difference > 150 and car_speed < 2275 and agent.controller.throttle == 1.0 else False
     return car_speed
 
+def default_drive(agent, local_target, target_speed):
+    default_throttle(agent, target_speed, 1)
+    angles = default_orient(agent, local_target, 1)
+
+    agent.controller.boost = False if abs(angles[1]) > 0.3 or agent.me.airborne else agent.controller.boost
+    agent.controller.handbrake = True if abs(angles[1]) > 2 or local_target.magnitude() < find_turn_radius(abs(agent.me.local(agent.me.velocity)[0])) * abs(angles[1]) else agent.controller.handbrake
+
+    return angles
+    
 def in_field(point,radius):
     #determines if a point is inside the standard soccer field
     point = Vector3(abs(point[0]),abs(point[1]),abs(point[2]))
@@ -219,7 +216,7 @@ def is_on_wall(point, try_to_reach):
     distance = distance_to_wall(point)[0]
 
     if try_to_reach:
-        return distance < 350 and point[2] > 300
+        return distance < 300 < point[2]
     else:
         return distance < 150
 
@@ -319,8 +316,41 @@ def invlerp(a, b, v):
     #Works for both numbers and Vector3s
     return (v - a)/(b - a)
 
-def pom_sqrt(x):
-    if x < 0:
+def pom_sqrt(x, both=False):
+    if x < 0 :
         return -math.sqrt(abs(x))
     else:
         return math.sqrt(x)
+
+def find_shot_angle(s, x, y):
+    g = 650 # gravity constant
+    
+    if s**4 - g * (g * x**2 + 2 * y * s**2) < 0:
+        return 0 # not possible to hit target at speed without hitting ground, so angle defaults to 0
+    else:
+        shot_angle_1 = math.atan2(s**2 + math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)
+        shot_angle_2 = math.atan2(s**2 - math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)
+        straight_angle = math.atan2(y,x)
+
+        return shot_angle_1 if abs(straight_angle - shot_angle_1) < abs(straight_angle - shot_angle_2) else shot_angle_2 # returns the smallest angle to hit target
+
+def get_max_angle(time, acceleration, int_ang_vel):
+    time_until_max = (5.5 - int_ang_vel) / acceleration
+    
+    if time < time_until_max:
+        fin_ang_vel = int_ang_vel + acceleration * time
+        return ((int_ang_vel + fin_ang_vel) / 2) * time
+    else:
+        return ((int_ang_vel + 5.5) / 2) * time_until_max + 5.5 * (time - time_until_max)
+
+def length_by_angle(angle):
+    if angle < math.pi / 2:
+        length = 84.3
+        default_angle = math.atan(73/42)
+        new_angle = default_angle + abs(angle)
+        return math.sin(new_angle) * length, math.cos(new_angle) * length
+    else:
+        length = 65.299
+        default_angle = math.atan(-50/42)
+        new_angle = default_angle + abs(angle)
+        return math.sin(new_angle) * length, math.cos(new_angle) * length
