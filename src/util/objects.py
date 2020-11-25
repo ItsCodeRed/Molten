@@ -351,6 +351,12 @@ class Vector3:
         #Rotates this Vector3 by the given angle in radians
         #Note that this is only 2D, in the x and y axis
         return Vector3((math.cos(angle)*self[0]) - (math.sin(angle)*self[1]),(math.sin(angle)*self[0]) + (math.cos(angle)*self[1]),self[2])
+    def anglesign(self, value):
+        self_angle = math.atan(self.y/(self.x + 0.001)) if self.x >= 0 else math.atan(self.y/(self.x + 0.001)) + math.pi
+        value_angle = math.atan(value.y/(value.x + 0.001)) if value.x >= 0 else math.atan(value.y/(value.x + 0.001)) + math.pi
+        return value_angle - self_angle
+    def flatten_by_vector(self,value):
+        return Vector3(self[0]*(1-abs(value[0])), self[1]*(1-abs(value[1])), self[2]*(1-abs(value[2])))
     def clamp(self,start,end):
         #Similar to integer clamping, Vector3's clamp() forces the Vector3's direction between a start and end Vector3
         #Such that Start < Vector3 < End in terms of clockwise rotation

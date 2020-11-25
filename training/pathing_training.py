@@ -49,13 +49,13 @@ class Pathing(StrikerExercise):
     def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
         return GameState(
             ball=BallState(physics=Physics(
-                location=Vector3(0, 0, 1000),
-                velocity=Vector3(0, 0, -100),
+                location=Vector3(1000, 0, 1000),
+                velocity=Vector3(rng.uniform(1000, 1200), -500, -100),
                 angular_velocity=Vector3(0, 0, 0))),
             cars={
                 0: CarState(
                     physics=Physics(
-                        location=Vector3(rng.uniform(-3000, 3000), rng.uniform(-3000, 3000), 0),
+                        location=Vector3(1000, 1000, 0),
                         rotation=Rotator(0, -pi / 2, 0),
                         velocity=Vector3(0, 0, 0),
                         angular_velocity=Vector3(0, 0, 0)),
