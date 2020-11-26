@@ -74,7 +74,7 @@ def find_hits(agent, targets):
                                 hits[pair].append(wall_hit(ball_location, intercept_time, best_shot_vector.flatten_by_vector(towards_wall), 1))
                             elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 4000:
                                 hits[pair].append(pop_up(ball_location, intercept_time, best_shot_vector, 1))
-                            elif ball_location[2] < 300:
+                            elif ball_location[2] - best_shot_vector[2] * 150 < 280:
                                 hits[pair].append(shoot(ball_location, intercept_time, best_shot_vector, 1))
                             elif ball_location[2] - best_shot_vector[2] * 150 < 500:
                                 hits[pair].append(double_jump(ball_location, intercept_time, best_shot_vector, 1))
