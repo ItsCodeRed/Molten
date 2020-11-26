@@ -155,6 +155,7 @@ class ball_object:
         self.velocity = Vector3(0,0,0)
         self.latest_touched_time = 0
         self.latest_touched_team = 0
+        self.radius = 94.41
     def update(self,packet):
         ball = packet.game_ball
         self.location.data = [ball.physics.location.x, ball.physics.location.y, ball.physics.location.z]

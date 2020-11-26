@@ -34,8 +34,8 @@ def find_hits(agent, targets):
                     distance = car_to_ball.magnitude()
                     direction = car_to_ball.normalize()
                 else:
-                    distance = ((ball_location.flatten() + towards_wall * (ball_location[2] + wall_distance)) - agent.me.location).flatten().magnitude()
-                    direction = ((ball_location.flatten() + towards_wall * (ball_location[2] + wall_distance)) - agent.me.location).normalize()
+                    distance = ((ball_location.flatten() + towards_wall * (ball_location[2] + wall_distance - 100)) - agent.me.location).flatten().magnitude()
+                    direction = ((ball_location.flatten() + towards_wall * (ball_location[2] + wall_distance - 100)) - agent.me.location).normalize()
             else:
                 distance = car_to_ball.flatten().magnitude()
                 direction = car_to_ball.normalize()
