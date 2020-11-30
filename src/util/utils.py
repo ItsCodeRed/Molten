@@ -23,7 +23,7 @@ def eta(car, target, direction, distance):
     distance = distance + find_turn_radius(car.velocity.magnitude()) * forward_angle
 
     boosting_acceleration = 991.666
-    driving_acceleration = 1500 - int_velocity
+    driving_acceleration = cap(1500 - int_velocity, 1, 1500)
 
     time_until_no_boost = car.boost / 33.3
 
@@ -160,6 +160,38 @@ def default_orient(agent, local_target, direction = 1.0):
         math.atan2(local_target[2],local_target[0]), #angle required to pitch towards target
         math.atan2(local_target[1],local_target[0]), #angle required to yaw towards target
         math.atan2(up[1],up[2])]                     #angle required to roll upright
+    #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
+    agent.controller.steer = steer(target_angles[1], 0) * direction
+    agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
+    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/6)
+    agent.controller.roll = steer(target_angles[2], agent.me.angular_velocity[0]/3)
+    #Returns the angles, which can be useful for other purposes
+    return target_angles
+
+def roll_orient(agent, local_target, direction = 1.0):
+    #points the car towards a given local target.
+    #Direction can be changed to allow the car to steer towards a target while driving backwards
+    local_target *= direction
+    yaw_angle = math.atan2(local_target[1],local_target[0])
+    target_angles = [
+        math.atan2(local_target[2],local_target[0]) * abs(math.cos(yaw_angle)), #angle required to pitch towards target
+        0, #no yaw
+        math.atan2(local_target[2],abs(local_target[1])) * -sign(local_target[1]) * abs(math.sin(yaw_angle))] #angle required to roll towards target
+    #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
+    agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
+    agent.controller.roll = steer(target_angles[2], agent.me.angular_velocity[0]/3)
+    #Returns the angles, which can be useful for other purposes
+    return target_angles
+
+def freestyle_orient(agent, local_target, direction = 1.0):
+    #points the car towards a given local target.
+    #Direction can be changed to allow the car to steer towards a target while driving backwards
+    local_target *= direction
+    angle_from_target = Vector3(1,0,0).angle3D(local_target)
+    target_angles = [
+        math.atan2(local_target[2],local_target[0]), #angle required to pitch towards target
+        math.atan2(local_target[1],local_target[0]), #angle required to yaw towards target
+        math.atan2(local_target[1],local_target[2])]
     #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     agent.controller.steer = steer(target_angles[1], 0) * direction
     agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)

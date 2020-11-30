@@ -53,8 +53,11 @@ def find_hits(agent, targets):
                         left_vector = (left - ball_location)
                         right_vector = (right - ball_location)
                         best_shot_vector, target_location = direction.clamp3D(left_vector, right_vector, True)
-                        
+
                         car_final_vel = car_to_ball / time_remaining
+
+                        difference_in_vel = (car_final_vel - agent.me.velocity).magnitude()
+                        
                         shot_speed = (best_shot_vector * ((car_final_vel - ball_velocity).magnitude() + (500 if 130 < ball_location[2] < 300 else 0)) * 2 + ball_velocity).magnitude()
 
                         shot_angle = find_shot_angle(shot_speed, target_location.flatten().magnitude(), target_location.z)
