@@ -112,6 +112,7 @@ class car_object:
         self.orientation = Matrix3(0,0,0)
         self.velocity = Vector3(0,0,0)
         self.angular_velocity = [0,0,0]
+        self.hitbox = hitbox()
         self.demolished = False
         self.airborne = False
         self.supersonic = False
@@ -130,6 +131,7 @@ class car_object:
         self.velocity.data = [car.physics.velocity.x, car.physics.velocity.y, car.physics.velocity.z]
         self.orientation = Matrix3(car.physics.rotation.pitch, car.physics.rotation.yaw, car.physics.rotation.roll)
         self.angular_velocity = self.orientation.dot([car.physics.angular_velocity.x, car.physics.angular_velocity.y, car.physics.angular_velocity.z]).data
+        self.hitbox.update(self.index, packet)
         self.demolished = car.is_demolished
         self.airborne = not car.has_wheel_contact
         self.supersonic = car.is_super_sonic
@@ -148,6 +150,62 @@ class car_object:
     def up(self):
         #A vector pointing up relative to the cars orientation. Its magnitude is 1
         return self.orientation.up
+
+class hitbox:
+    def __init__(self):
+        self.location = Vector3.zero
+        self.offset = Vector3.zero
+        self.half_scale = Vector3.zero
+        self.orientation = Matrix3(Vector3.zero,Vector3.zero,Vector3.zero)
+    def update(self, index, packet):
+        car = packet.game_cars[index]
+        self.location = Vector3(car.physics.location.x, car.physics.location.y, car.physics.location.z)
+        self.orientation = Matrix3(car.physics.rotation.pitch, car.physics.rotation.yaw, car.physics.rotation.roll)
+        self.offset = Vector3(car.hitbox_offset.x, car.hitbox_offset.y, car.hitbox_offset.z)
+        self.half_scale = Vector3(car.hitbox.length, car.hitbox.width, car.hitbox.height) / 2
+    def get_nearest_point(self, point):
+        local_point = self.orientation.dot(point - self.location) + self.offset
+
+        closest_point = Vector3(
+            local_point[0] if local_point[0] > -self.half_scale[0] and local_point[0] < self.half_scale[0] else -self.half_scale[0] if local_point[0] < -self.half_scale[0] else self.half_scale[0],
+            local_point[1] if local_point[1] > -self.half_scale[1] and local_point[1] < self.half_scale[1] else -self.half_scale[1] if local_point[1] < -self.half_scale[1] else self.half_scale[1],
+            local_point[2] if local_point[2] > -self.half_scale[2] and local_point[2] < self.half_scale[2] else -self.half_scale[2] if local_point[2] < -self.half_scale[2] else self.half_scale[2]
+        )
+
+        return closest_point.dot(self.orientation) + self.location + self.offset.dot(self.orientation)
+    def intersect_ball(self, ball_location):
+        closest_point = self.get_nearest_point(ball_location)
+        return (closest_point - ball_location).magnitude() < 94.41
+    def render(self, agent, color):
+        orient = self.orientation
+        center = self.location + self.offset.dot(orient)
+        hs = self.half_scale
+
+        # bottom-right line
+        agent.line(center + Vector3(hs[0],hs[1],-hs[2]).dot(orient), center + Vector3(-hs[0],hs[1],-hs[2]).dot(orient), color)
+        # top-right line
+        agent.line(center + Vector3(hs[0],hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],hs[1],hs[2]).dot(orient), color)
+        # bottom-left line
+        agent.line(center + Vector3(hs[0],-hs[1],-hs[2]).dot(orient), center + Vector3(-hs[0],-hs[1],-hs[2]).dot(orient), color)
+        # top-left line
+        agent.line(center + Vector3(hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],-hs[1],hs[2]).dot(orient), color)
+        # bottom-front line
+        agent.line(center + Vector3(hs[0],-hs[1],-hs[2]).dot(orient), center + Vector3(hs[0],hs[1],-hs[2]).dot(orient), color)
+        # top-front line
+        agent.line(center + Vector3(hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(hs[0],hs[1],hs[2]).dot(orient), color)
+        # bottom-back line
+        agent.line(center + Vector3(-hs[0],-hs[1],-hs[2]).dot(orient), center + Vector3(-hs[0],hs[1],-hs[2]).dot(orient), color)
+        # top-back line
+        agent.line(center + Vector3(-hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],hs[1],hs[2]).dot(orient), color)
+        # front-right line
+        agent.line(center + Vector3(hs[0],hs[1],hs[2]).dot(orient), center + Vector3(hs[0],hs[1],-hs[2]).dot(orient), color)
+        # front-left line
+        agent.line(center + Vector3(hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(hs[0],-hs[1],-hs[2]).dot(orient), color)
+        # back-right line
+        agent.line(center + Vector3(-hs[0],hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],hs[1],-hs[2]).dot(orient), color)
+        # back-left line
+        agent.line(center + Vector3(-hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],-hs[1],-hs[2]).dot(orient), color)
+
 
 class ball_object:
     def __init__(self):
@@ -209,18 +267,26 @@ class Matrix3:
     #you can convert that to local coordinates by dotting it with this matrix
     #ie: local_ball_location = Matrix3.dot(ball.location - car.location)
     def __init__(self,pitch,yaw,roll): 
-        CP = math.cos(pitch)
-        SP = math.sin(pitch)
-        CY = math.cos(yaw)
-        SY = math.sin(yaw)
-        CR = math.cos(roll)
-        SR = math.sin(roll)
-        #List of 3 vectors, each descriping the direction of an axis: Forward, Left, and Up
-        self.data = [
-            Vector3(CP*CY, CP*SY, SP),
-            Vector3(CY*SP*SR-CR*SY,SY*SP*SR+CR*CY, -CP*SR),
-            Vector3(-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)]
-        self.forward, self.left, self.up = self.data
+        if isinstance(pitch, float):
+            CP = math.cos(pitch)
+            SP = math.sin(pitch)
+            CY = math.cos(yaw)
+            SY = math.sin(yaw)
+            CR = math.cos(roll)
+            SR = math.sin(roll)
+            #List of 3 vectors, each descriping the direction of an axis: Forward, Left, and Up
+            self.data = [
+                Vector3(CP*CY, CP*SY, SP),
+                Vector3(CY*SP*SR-CR*SY,SY*SP*SR+CR*CY, -CP*SR),
+                Vector3(-CR*CY*SP-SR*SY, -CR*SY*SP+SR*CY, CP*CR)]
+            self.forward, self.left, self.up = self.data
+        else:
+            self.data = [
+                pitch,
+                yaw,
+                roll
+            ]
+            self.forward, self.left, self.up = self.data
     def __getitem__(self,key):
         return self.data[key]
     def dot(self,vector):

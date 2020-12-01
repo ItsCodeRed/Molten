@@ -23,7 +23,7 @@ def eta(car, target, direction, distance):
     distance = distance + find_turn_radius(car.velocity.magnitude()) * forward_angle
 
     boosting_acceleration = 991.666
-    driving_acceleration = cap(1500 - int_velocity, 1, 1500)
+    driving_acceleration = 1600 - int_velocity if int_velocity < 1410 else 1
 
     time_until_no_boost = car.boost / 33.3
 

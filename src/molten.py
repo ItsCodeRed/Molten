@@ -131,6 +131,7 @@ class Molten(MoltenAgent):
     
     def run(agent):
         agent.debug_stack()
+        agent.me.hitbox.render(agent, [255, 255, 255])
 
         is_twovstwo = len(agent.foes) == len(agent.friends) + 1 == 2
         is_onevsone = len(agent.foes) == len(agent.friends) + 1 == 1
