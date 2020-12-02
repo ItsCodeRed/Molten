@@ -274,7 +274,7 @@ class shoot():
         self.ball_location = ball_location
         self.intercept_time = intercept_time
         self.shot_vector = shot_vector
-        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.45
+        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.55
         self.dodge_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
         self.dodge_point = self.ball_location - (self.shot_vector * 170)
         self.direction = direction
@@ -328,11 +328,11 @@ class shoot():
             self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
-        on_target = (self.dodge_point - perdicted_location).magnitude() <  50
+        on_target = (self.dodge_point - perdicted_location).magnitude() < 50
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
-            line_up_for_shot(self.dodge_point - self.shot_vector.flatten().normalize() * 60, speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
+            line_up_for_shot(self.dodge_point - self.shot_vector.flatten().normalize() * 60 - agent.me.velocity.flatten() * 0.1, speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
 
             if time_until_dodge < time_to_jump * 0.8 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
                 agent.pop()
