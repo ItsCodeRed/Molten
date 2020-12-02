@@ -137,19 +137,22 @@ class aerial():
     def is_viable(self, agent, time: float):
         time_remaining = self.intercept_time - time
 
-        ball_to_car = (self.ball_location - agent.me.location).flatten()
-        car_final_vel = ball_to_car / time_remaining
-
-        speed_diff = (car_final_vel - agent.me.velocity.flatten()).magnitude()
-
-
-        T = self.intercept_time - time - speed_diff / 700
-        xf = agent.me.location + car_final_vel * T + 0.5 * gravity * T ** 2
-        vf = car_final_vel + gravity * T
         if not agent.me.airborne:
+            ball_to_car = (self.ball_location - agent.me.location).flatten()
+            car_final_vel = ball_to_car / time_remaining
+            speed_diff = (car_final_vel - agent.me.velocity.flatten()).magnitude()
+
+            T = self.intercept_time - time - speed_diff / 700
+            xf = agent.me.location + car_final_vel * T + 0.5 * gravity * T ** 2
+            vf = car_final_vel + gravity * T
+
             vf += agent.me.orientation.up * (2 * jump_speed + jump_acc * jump_max_duration)
             xf += agent.me.orientation.up * (jump_speed * (2 * T - jump_max_duration) + jump_acc * (
                     T * jump_max_duration - 0.5 * jump_max_duration ** 2))
+        else:
+            T = self.intercept_time - time
+            xf = agent.me.location + agent.me.velocity * T + 0.5 * gravity * T ** 2
+            vf = agent.me.velocity + gravity * T
 
         delta_x = self.ball_location - xf
         f = delta_x.normalize()
@@ -203,7 +206,7 @@ class line_up_for_shot():
                 car_to_target_perp = car_to_target.cross((0, 0, side_of_shot))
 
                 distance = car_to_target.magnitude()
-                wall_mod = 0.5
+                wall_mod = 0.25
         else:
             side_of_shot = sign(self.direction_vector.cross((0, 0, 1)).dot(car_to_target))
             car_to_target_perp = car_to_target.cross((0, 0, side_of_shot))
@@ -271,7 +274,7 @@ class shoot():
         self.ball_location = ball_location
         self.intercept_time = intercept_time
         self.shot_vector = shot_vector
-        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.52
+        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.45
         self.dodge_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
         self.dodge_point = self.ball_location - (self.shot_vector * 170)
         self.direction = direction
@@ -309,11 +312,13 @@ class shoot():
 
         jump_acc_time = cap(time_until_dodge, 0, jump_max_duration)
 
+        up_during_jump = (agent.me.up * 2 + self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()).normalize()
+
         perdicted_location = perdict_car_location(agent.me, time_until_dodge) + \
             agent.me.up * jump_speed * time_until_dodge + \
-            agent.me.up * jump_acc * jump_acc_time * (time_until_dodge - 0.5 * jump_acc_time) + \
+            up_during_jump * jump_acc * jump_acc_time * (time_until_dodge - 0.5 * jump_acc_time) + \
             agent.me.velocity.flatten() * 0.1 + \
-            (self.dodge_vector * 90).flatten()
+            self.shot_vector.flatten().normalize() * 60
 
         perdicted_hitbox = agent.me.hitbox
         perdicted_hitbox.location = perdicted_location
@@ -323,16 +328,17 @@ class shoot():
             self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
+        on_target = (self.dodge_point - perdicted_location).magnitude() <  50
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
-            line_up_for_shot(self.dodge_point - (self.dodge_vector * 60).flatten(), speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
+            line_up_for_shot(self.dodge_point - self.shot_vector.flatten().normalize() * 60, speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
 
             if time_until_dodge < time_to_jump * 0.8 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif not missing and abs((self.dodge_point - perdicted_location).z) < 30:
+            elif not missing and (time_until_dodge < time_to_jump or (time_until_dodge < 1.25 and on_target)):
                 self.jumping = True 
                 if self.time_of_jump == -1:
                     elapsed = 0
@@ -345,7 +351,7 @@ class shoot():
             if (raw_time_remaining > 0.1 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -0.1 or (not agent.me.airborne and self.counter > 0):
                 agent.pop()
                 agent.push(recovery())
-            elif self.counter == 0 and elapsed < cap(time_to_jump, 0, 0.2) and raw_time_remaining > 0.1:
+            elif self.counter == 0 and elapsed < cap(time_to_jump, 0, 0.2) and raw_time_remaining > 0.11:
                 #Initial jump to get airborne + we hold the jump button for extra power as required
                 agent.controller.jump = True
             elif self.counter < 2:
@@ -501,7 +507,7 @@ class wall_hit():
         best_point = self.dodge_point + self.shot_vector * 95
 
         car_to_ball = self.ball_location - agent.me.location
-        car_to_dodge_point = self.dodge_point - agent.me.location\
+        car_to_dodge_point = self.dodge_point - agent.me.location
 
         distance_to_ball = (self.ball_location - agent.me.location).magnitude()
         if is_on_wall(agent.me.location, False):
@@ -517,20 +523,26 @@ class wall_hit():
             agent.me.up * jump_acc * jump_acc_time * (time_remaining - 0.5 * jump_acc_time)
         dodge_to_perdicted = self.dodge_point - perdicted_location
 
-        adjusted_target = self.dodge_point + dodge_to_perdicted if is_on_wall(agent.me.location, False) else self.dodge_point
+        adjusted_target = self.dodge_point + dodge_to_perdicted.flatten_by_vector(towards_wall) if is_on_wall(agent.me.location, False) and height_of_jump > 120 else self.dodge_point
 
-        hitting = dodge_to_perdicted.magnitude() < 94.41 or (best_point - perdicted_location).magnitude() < 94.41 or (self.ball_location - perdicted_location).magnitude() < 94.41
-        
-        can_dodge = distance_to_ball < dodge_length + 80 or distance < 80 or (agent.ball.location - agent.me.location).magnitude() < dodge_length + 80
+        perdicted_hitbox = agent.me.hitbox
+        perdicted_hitbox.location = perdicted_location
+        perdicted_hitbox.orientation = Matrix3(
+            self.shot_vector,
+            self.shot_vector.cross(agent.me.up).normalize(),
+            self.shot_vector.cross(self.shot_vector.cross(agent.me.up)).normalize()
+        )
+        perdicted_hitbox.render(agent, [255,0,0])
+        missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
             line_up_for_shot(adjusted_target, speed_required, self.intercept_time, self.shot_vector, 0.3, 2).run(agent)
 
-            if raw_time_remaining < -0.2 or (time_remaining < 0.01 and height_of_jump > 120) or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
+            if raw_time_remaining < -0.2 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif hitting and is_on_wall(agent.me.location, False) and height_of_jump > 120:
+            elif not missing and height_of_jump > 120:
                 self.jumping = True 
         else:
             if (raw_time_remaining > 0.2 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -1 or (not agent.me.airborne and self.counter > 0):
@@ -543,7 +555,7 @@ class wall_hit():
                 #make sure we aren't jumping for at least 3 frames
                 agent.controller.jump = False
                 self.counter += 1
-            elif raw_time_remaining <= 0.1 and raw_time_remaining > -0.9 and can_dodge:
+            elif raw_time_remaining <= 0.1 and raw_time_remaining > -0.9:
                 #dodge in the direction of the shot_vector
                 agent.controller.jump = True
                 if not self.dodging:
