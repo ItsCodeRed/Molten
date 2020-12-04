@@ -58,7 +58,7 @@ def find_hits(agent, targets):
 
                         difference_in_vel = (car_final_vel - agent.me.velocity).magnitude()
                         
-                        shot_speed = (best_shot_vector * ((car_final_vel - ball_velocity).magnitude() + (500 if 130 < ball_location[2] < 300 else 0)) * 2 + ball_velocity).magnitude()
+                        shot_speed = (best_shot_vector * ((car_final_vel - ball_velocity).magnitude() + (500 if 130 < ball_location[2] < 300 else 0)) * 4 + ball_velocity).magnitude()
 
                         shot_angle = find_shot_angle(shot_speed, target_location.flatten().magnitude(), target_location.z)
                         best_shot_vector = best_shot_vector.flatten().normalize() * math.cos(shot_angle) + Vector3(0,0,1) * math.sin(shot_angle)
