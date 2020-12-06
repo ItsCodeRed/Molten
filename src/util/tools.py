@@ -63,9 +63,9 @@ def find_hits(agent, targets):
                         shot_angle = find_shot_angle(shot_speed, target_location.flatten().magnitude(), target_location.z)
                         best_shot_vector = best_shot_vector.flatten().normalize() * math.cos(shot_angle) + Vector3(0,0,1) * math.sin(shot_angle)
                         best_shot_vector = (best_shot_vector * shot_speed - ball_velocity).normalize()
-                        flattened = ball_location.z - best_shot_vector.z * 170 < 100
+                        flattened = ball_location.z - best_shot_vector.z * 170 < 94.41
                         if flattened:
-                            best_shot_vector.z = (ball_location.z - 100) / 170
+                            best_shot_vector.z = (ball_location.z - 94.41) / 170
                             best_shot_vector = best_shot_vector.normalize()
                     
                         #Check to make sure our approach is inside the field

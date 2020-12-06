@@ -25,7 +25,7 @@ def eta(car, target, direction, distance):
     boosting_acceleration = 991.666
     driving_acceleration = 1600 - int_velocity if int_velocity < 1410 else 1
 
-    time_until_no_boost = car.boost / 33.3
+    time_until_no_boost = car.boost / 30
 
     boosted_acceleration = driving_acceleration + boosting_acceleration
     final_boost_velocity = int_velocity + boosted_acceleration * time_until_no_boost

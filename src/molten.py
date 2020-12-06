@@ -91,7 +91,7 @@ class Molten(MoltenAgent):
             if agent.kickoff:
                 if len(agent.stack) < 1:
                     agent.push(kickoff(sign(agent.me.location.x + 0.01)))
-                elif isinstance(agent.stack[0], goto):
+                elif isinstance(agent.stack[-1], goto):
                     agent.pop()
             elif sign(ball_location.y) == side(agent.team) and (foe_one_back or foe_two_back):
                 save(agent)
@@ -101,17 +101,17 @@ class Molten(MoltenAgent):
             if (my_goal_distance_to_friend + 500 > my_goal_distance_to_ball < my_goal_distance_to_me) or (my_eta < friend_eta):
                 if len(agent.stack) < 1:
                     agent.push(goto(shadow_pos, ball_to_me, 2300))
-                elif not isinstance(agent.stack[0], goto):
+                elif not isinstance(agent.stack[-1], goto):
                     agent.pop()
                 else:
-                    agent.stack[0].update(shadow_pos, ball_to_me, 2300)
+                    agent.stack[-1].update(shadow_pos, ball_to_me, 2300)
             else:
                 if len(agent.stack) < 1:
                     agent.push(goto(shadow_pos, ball_to_me, 1400))
-                elif not isinstance(agent.stack[0], goto):
+                elif not isinstance(agent.stack[-1], goto):
                     agent.pop()
                 else:
-                    agent.stack[0].update(shadow_pos, ball_to_me, 1400)
+                    agent.stack[-1].update(shadow_pos, ball_to_me, 1400)
     
     def atba_strats(agent):
         if len(agent.stack) < 1:
