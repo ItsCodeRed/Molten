@@ -23,9 +23,9 @@ def eta(car, target, direction, distance):
     distance = distance + find_turn_radius(car.velocity.magnitude()) * forward_angle
 
     boosting_acceleration = 991.666
-    driving_acceleration = 1600 - int_velocity if int_velocity < 1410 else 1
+    driving_acceleration = 1500 - int_velocity
 
-    time_until_no_boost = car.boost / 30
+    time_until_no_boost = car.boost / 33.3
 
     boosted_acceleration = driving_acceleration + boosting_acceleration
     final_boost_velocity = int_velocity + boosted_acceleration * time_until_no_boost
@@ -187,7 +187,6 @@ def freestyle_orient(agent, local_target, direction = 1.0):
     #points the car towards a given local target.
     #Direction can be changed to allow the car to steer towards a target while driving backwards
     local_target *= direction
-    angle_from_target = Vector3(1,0,0).angle3D(local_target)
     target_angles = [
         math.atan2(local_target[2],local_target[0]), #angle required to pitch towards target
         math.atan2(local_target[1],local_target[0]), #angle required to yaw towards target

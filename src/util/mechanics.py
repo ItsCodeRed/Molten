@@ -106,7 +106,7 @@ class aerial():
             delta_x = self.target_location - xf
             direction = delta_x.normalize()
             if delta_x.magnitude() > 50:
-                default_orient(agent, agent.me.local(delta_x))
+                freestyle_orient(agent, agent.me.local(delta_x))
             else:
                 if self.shot_vector is not None:
                     default_orient(agent, agent.me.local(self.shot_vector))
@@ -330,17 +330,17 @@ class shoot():
             self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
-        on_target = ((self.dodge_point + self.shot_vector.flatten().normalize() * 50) - perdicted_location).magnitude() < 45
+        on_target = (self.dodge_point - perdicted_location + self.shot_vector.flatten().normalize() * 50).magnitude() < 100
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
-            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
+            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, time_to_jump * 2, 1).run(agent)
 
-            if time_until_dodge < 0 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
+            if time_until_dodge < time_to_jump / 2 or (speed_required - 2300) * time_remaining > 25 or not shot_valid(agent, self):
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif (on_target and time_until_dodge < 1.25) or (not missing and time_until_dodge < time_to_jump):
+            elif (on_target or not missing) and time_until_dodge < time_to_jump:
                 self.jumping = True 
                 if self.time_of_jump == -1:
                     elapsed = 0
@@ -351,10 +351,10 @@ class shoot():
             default_orient(agent, agent.me.local(self.dodge_vector))
             # default_orient(agent, agent.me.local(agent.me.forward.flatten().normalize() * self.shot_vector.flatten().magnitude() + Vector3(0, 0, self.shot_vector.z)))
 
-            if (raw_time_remaining > 0.1 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -0.3 or (not agent.me.airborne and self.counter > 0):
+            if (raw_time_remaining > 0.1 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -1 or (not agent.me.airborne and self.counter > 0):
                 agent.pop()
                 agent.push(recovery())
-            elif self.counter == 0 and elapsed < cap(time_to_jump, 0, 0.2) and raw_time_remaining > 0.12:
+            elif (self.counter == 0 and elapsed < cap(time_to_jump, 0, 0.2) and raw_time_remaining > 0.1) or not agent.me.airborne:
                 #Initial jump to get airborne + we hold the jump button for extra power as required
                 agent.controller.jump = True
             elif self.counter < 2:
@@ -376,6 +376,12 @@ class pop_up():
         self.intercept_time = intercept_time
         self.shot_vector = shot_vector
         self.intercept = self.ball_location - (self.shot_vector * 170)
+        self.direction = direction
+    def update(self, ball_location, intercept_time, shot_vector, direction):
+        self.ball_location = ball_location
+        self.shot_vector = shot_vector
+        self.dodge_point = self.ball_location - self.shot_vector * 170
+        self.intercept_time = intercept_time
         self.direction = direction
     def run(self, agent):
         raw_time_remaining = self.intercept_time - agent.time
@@ -438,7 +444,7 @@ class double_jump():
             self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
-        on_target = (self.dodge_point - perdicted_location).magnitude() < 50
+        on_target = (self.dodge_point - perdicted_location).magnitude() < 100
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
@@ -478,7 +484,6 @@ class double_jump():
                 agent.controller.roll = 0
                 agent.controller.steer = 0
                 self.counter += 1
-
 
 class wall_hit():
     def __init__(self, ball_location, intercept_time, shot_vector, direction):
@@ -538,6 +543,7 @@ class wall_hit():
             self.shot_vector.cross(self.shot_vector.cross(agent.me.up)).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
+        on_target = (self.dodge_point - perdicted_location).magnitude() < 100
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
@@ -547,13 +553,13 @@ class wall_hit():
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif not missing and height_of_jump > 120:
+            elif (not missing or on_target) and height_of_jump > 120:
                 self.jumping = True 
         else:
             if (raw_time_remaining > 0.2 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -1 or (not agent.me.airborne and self.counter > 0):
                 agent.pop()
                 agent.push(recovery())
-            elif self.counter == 0 and raw_time_remaining > 0.05:
+            elif self.counter == 0 and (raw_time_remaining > 0.1 or not agent.me.airborne):
                 #Initial jump to get airborne + we hold the jump button for extra power as required
                 agent.controller.jump = True
             elif self.counter < 3:

@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import rlbot.utils.structures.game_data_struct as game_data_struct
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 
@@ -31,7 +32,6 @@ class MoltenAgent(BaseAgent):
         self.kickoff = False
         #the rotation position of my bot
         self.rotation_index = 0
-        
     def get_ready(self,packet):
         #Preps all of the objects that will be updated during play
         field_info = self.get_field_info()
@@ -120,6 +120,7 @@ class car_object:
         self.doublejumped = False
         self.boost = 0
         self.index = index
+        self.next_hit = ball_moment(Vector3(0,0,0),Vector3(0,0,0),0,0)
         if packet != None:
             self.update(packet)
     def local(self,value):
@@ -138,6 +139,9 @@ class car_object:
         self.jumped = car.jumped
         self.doublejumped = car.double_jumped
         self.boost = car.boost
+    def debug_next_hit(self, agent):
+        agent.line(self.next_hit.location, self.location, [255,255,255])
+        agent.line(self.next_hit.location - Vector3(0,0,-100), self.next_hit.location - Vector3(0,0,100), [0,255,255])
     @property
     def forward(self):
         #A vector pointing forwards relative to the cars orientation. Its magnitude is 1
@@ -206,6 +210,12 @@ class hitbox:
         # back-left line
         agent.line(center + Vector3(-hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],-hs[1],-hs[2]).dot(orient), color)
 
+class ball_moment:
+    def __init__(self, location, velocity, time, eta):
+        self.location = location
+        self.velocity = velocity
+        self.time = time
+        self.eta = eta
 
 class ball_object:
     def __init__(self):

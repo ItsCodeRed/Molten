@@ -48,8 +48,8 @@ class Molten(MoltenAgent):
         ball_to_friend = ball_location - agent.friends[0].location
         friend_distance = ball_to_friend.magnitude()
 
-        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)
-        friend_eta = eta(agent.friends[0], ball_location, ball_to_friend.normalize(), friend_distance)
+        my_eta = agent.me.next_hit.eta
+        friend_eta = agent.friends[0].next_hit.eta
 
         my_goal_location = agent.friend_goal.location
         my_goal_distance_to_me = (my_goal_location - agent.me.location).magnitude()
@@ -60,7 +60,7 @@ class Molten(MoltenAgent):
         friend_back = my_goal_distance_to_friend < my_goal_distance_to_ball
 
         if (not agent.kickoff and ((my_eta < friend_eta and me_back == friend_back) or (me_back and not friend_back))) or \
-            (agent.kickoff and ((abs(my_eta - friend_eta) < 0.1 and sign(agent.me.location.x) == side(agent.team)) or (my_distance < friend_distance))):
+            (agent.kickoff and ((abs(my_eta - friend_eta) < 0.1 and sign(agent.me.location.x) != side(agent.team)) or (my_distance < friend_distance))) or my_distance < 500 and me_back:
             agent.rotation_index = 0
         else:
             agent.rotation_index = 1
@@ -68,8 +68,8 @@ class Molten(MoltenAgent):
         ball_to_foe_one = ball_location - agent.foes[0].location
         ball_to_foe_two = ball_location - agent.foes[1].location
 
-        foe_one_eta = eta(agent.foes[0], ball_location, ball_to_foe_one.normalize(), ball_to_foe_one.magnitude())
-        foe_two_eta = eta(agent.foes[1], ball_location, ball_to_foe_two.normalize(), ball_to_foe_two.magnitude())
+        foe_one_eta = agent.foes[0].next_hit.eta
+        foe_two_eta = agent.foes[1].next_hit.eta
 
         foe_goal_distance_to_foe_one = (agent.foe_goal.location - agent.foes[0].location).magnitude()
         foe_goal_distance_to_foe_two = (agent.foe_goal.location - agent.foes[1].location).magnitude()
@@ -101,16 +101,16 @@ class Molten(MoltenAgent):
             if (my_goal_distance_to_friend + 500 > my_goal_distance_to_ball < my_goal_distance_to_me) or (my_eta < friend_eta):
                 if len(agent.stack) < 1:
                     agent.push(goto(shadow_pos, ball_to_me, 2300))
-                elif not isinstance(agent.stack[-1], goto):
+                elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
                     agent.pop()
-                else:
+                elif isinstance(agent.stack[-1], goto):
                     agent.stack[-1].update(shadow_pos, ball_to_me, 2300)
             else:
                 if len(agent.stack) < 1:
                     agent.push(goto(shadow_pos, ball_to_me, 1400))
-                elif not isinstance(agent.stack[-1], goto):
+                elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
                     agent.pop()
-                else:
+                elif isinstance(agent.stack[-1], goto):
                     agent.stack[-1].update(shadow_pos, ball_to_me, 1400)
     
     def atba_strats(agent):
@@ -130,7 +130,9 @@ class Molten(MoltenAgent):
                     agent.push(short_shot(agent.foe_goal.location))
     
     def run(agent):
+        find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()
+        agent.me.debug_next_hit(agent)
         agent.me.hitbox.render(agent, [255, 255, 255])
 
         is_twovstwo = len(agent.foes) == len(agent.friends) + 1 == 2
