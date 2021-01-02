@@ -452,9 +452,9 @@ class Vector3:
     def clamp3D(self, bottom_left, top_right, return_target=False):
         #Similar to integer clamping, Vector3's clamp() forces the Vector3's direction between a start and end Vector3
         #Such that left < Vector3 < right in terms of clockwise rotation
-        #Will also limit angle in the vertical direction. Such that top < Vector3 < bottom
+        #Will also limit angle in the vertical direction. Such that top > Vector3 > bottom
         s = self.normalize()
-        v1 = self.clamp(bottom_left.normalize(), top_right.normalize()).flatten().normalize() * self.flatten().magnitude()
+        v1 = self.clamp(bottom_left.normalize(), top_right.normalize()).flatten().normalize().flatten()
         v2 = (top_right - bottom_left).flatten()
         p2 = bottom_left.flatten()
         if (v1.cross(v2).angle3D(p2.cross(v2)) == math.pi or v1.cross(v2).angle3D(p2.cross(v2)) == 0) and v1.cross(v2) != Vector3.zero:

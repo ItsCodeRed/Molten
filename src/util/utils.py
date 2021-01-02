@@ -20,10 +20,10 @@ def eta(car, target, direction, distance):
 
     int_velocity = math.cos(car.velocity.angle(car_to_target)) * car.velocity.magnitude()
 
-    distance = distance + find_turn_radius(car.velocity.magnitude()) * forward_angle
+    # distance = distance + find_turn_radius(car.velocity.magnitude()) * forward_angle
 
     boosting_acceleration = 991.666
-    driving_acceleration = 1500 - int_velocity
+    driving_acceleration = 1500
 
     time_until_no_boost = car.boost / 33.3
 
@@ -203,7 +203,7 @@ def default_throttle(agent, target_speed, direction = 1.0):
     #accelerates the car to a desired speed using throttle and boost
     car_speed = agent.me.local(agent.me.velocity)[0]
     speed_difference = (target_speed * direction) - car_speed
-    agent.controller.throttle = cap((speed_difference**2) * sign(speed_difference)/1000, -1.0, 1.0)
+    agent.controller.throttle = cap((speed_difference**2) * sign(speed_difference)/500, -1.0, 1.0)
     agent.controller.boost = True if speed_difference > 150 and car_speed < 2275 and agent.controller.throttle == 1.0 else False
     return car_speed
 
@@ -357,7 +357,7 @@ def find_shot_angle(s, x, y):
     g = 650 # gravity constant
     
     if s**4 - g * (g * x**2 + 2 * y * s**2) < 0:
-        return 0 # not possible to hit target at speed without hitting ground, so angle defaults to 0
+        return math.pi / 4 # not possible to hit target at speed without hitting ground, so angle defaults to 0
     else:
         shot_angle_1 = math.atan2(s**2 + math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)
         shot_angle_2 = math.atan2(s**2 - math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)

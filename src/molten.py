@@ -33,7 +33,7 @@ class Molten(MoltenAgent):
         upfield_right = Vector3(side(agent.index) * 4096, ball_location.y - side(agent.index) * 1000, 0)
 
         if agent.kickoff and len(agent.stack) < 1:
-            agent.push(kickoff(sign(agent.me.location.x + 0.01)))
+            agent.push(kickoff(agent.me.location.x))
         elif shot_incoming:
             save(agent)
         else:
@@ -48,8 +48,8 @@ class Molten(MoltenAgent):
         ball_to_friend = ball_location - agent.friends[0].location
         friend_distance = ball_to_friend.magnitude()
 
-        my_eta = agent.me.next_hit.eta
-        friend_eta = agent.friends[0].next_hit.eta
+        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)
+        friend_eta = eta(agent.friends[0], ball_location, ball_to_friend.normalize(), friend_distance)
 
         my_goal_location = agent.friend_goal.location
         my_goal_distance_to_me = (my_goal_location - agent.me.location).magnitude()
@@ -68,8 +68,8 @@ class Molten(MoltenAgent):
         ball_to_foe_one = ball_location - agent.foes[0].location
         ball_to_foe_two = ball_location - agent.foes[1].location
 
-        foe_one_eta = agent.foes[0].next_hit.eta
-        foe_two_eta = agent.foes[1].next_hit.eta
+        foe_one_eta = eta(agent.foes[0], ball_location, ball_to_foe_one.normalize(), ball_to_foe_one.magnitude())
+        foe_two_eta = eta(agent.foes[1], ball_location, ball_to_foe_two.normalize(), ball_to_foe_two.magnitude())
 
         foe_goal_distance_to_foe_one = (agent.foe_goal.location - agent.foes[0].location).magnitude()
         foe_goal_distance_to_foe_two = (agent.foe_goal.location - agent.foes[1].location).magnitude()
@@ -90,7 +90,7 @@ class Molten(MoltenAgent):
         if agent.rotation_index == 0:
             if agent.kickoff:
                 if len(agent.stack) < 1:
-                    agent.push(kickoff(sign(agent.me.location.x + 0.01)))
+                    agent.push(kickoff(agent.me.location.x))
                 elif isinstance(agent.stack[-1], goto):
                     agent.pop()
             elif sign(ball_location.y) == side(agent.team) and (foe_one_back or foe_two_back):
@@ -116,21 +116,21 @@ class Molten(MoltenAgent):
     def atba_strats(agent):
         if len(agent.stack) < 1:
             if agent.kickoff:
-                agent.push(kickoff(sign(agent.me.location.x + 0.01)))
+                agent.push(kickoff(agent.me.location.x))
             else:
                 upfield_left = Vector3(-side(agent.index) * 4096, agent.ball.location.y - side(agent.index) * 1000, 0)
                 upfield_right = Vector3(side(agent.index) * 4096, agent.ball.location.y - side(agent.index) * 1000, 0)
                 targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "upfield":(upfield_left, upfield_right)}
-                shots = find_hits(agent, targets)
-                if len(shots["goal"]) > 0:
-                    agent.push(shots["goal"][0])
-                elif len(shots["upfield"]) > 0:
-                    agent.push(shots["upfield"][0])
+                shots = find_shots(agent, targets)
+                if shots["goal"] != None:
+                    agent.push(shots["goal"])
+                elif shots["upfield"] != None:
+                    agent.push(shots["upfield"])
                 else:
                     agent.push(short_shot(agent.foe_goal.location))
     
     def run(agent):
-        find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
+        # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()
         agent.me.debug_next_hit(agent)
         agent.me.hitbox.render(agent, [255, 255, 255])
