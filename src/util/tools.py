@@ -16,7 +16,7 @@ def find_shots(agent, targets):
         if test_shot(agent, targets, ball_prediction.slices[coarse_index], hits) != hits:
             for index in range(max(20, coarse_index - 20), coarse_index):
                 if test_hit(agent, targets, ball_prediction.slices[index], hits) == "scored":
-                        break
+                    break
                 if test_shot(agent, targets, ball_prediction.slices[index], hits) != hits:
                     hits = test_shot(agent, targets, ball_prediction.slices[index])
     return hits
@@ -47,16 +47,17 @@ def test_shot(agent, targets, selected_slice, hits):
             distance = car_to_ball.flatten().magnitude()
             direction = car_to_ball.normalize()
 
-        time_to_jump = find_jump_time(cap(ball_location[2], 0, 480), ball_location[2] >= 300) if ball_location[2] < 600 else 0.2
         estimated_time = eta(agent.me, ball_location, direction, distance)
 
-        if estimated_time < time_remaining and time_remaining > time_to_jump:
+        if estimated_time < time_remaining:
             for pair in targets:
                 if hits[pair] != None:
                     continue
                 #First we correct the target coordinates to account for the ball's radius
                 #If swapped == True, the shot isn't possible because the ball wouldn't fit between the targets
+                agent.line(targets[pair][0], targets[pair][0] + Vector3(0, 0, 500))
                 left, right, swapped = post_correction(ball_location, targets[pair][0], targets[pair][1])
+                print(Vector3(300, 500, 0) + Vector3(0, 0, 100)) 
                 if not swapped:
                     #Now we find the easiest direction to hit the ball in order to land it between the target points
                     left_vector = (left - ball_location)
@@ -71,7 +72,7 @@ def test_shot(agent, targets, selected_slice, hits):
 
                     # shot_angle = find_shot_angle(shot_speed, target_location.flatten().magnitude(), target_location.z)
                     best_shot_vector = (best_shot_vector * shot_speed - ball_velocity).normalize()
-                    shot_angle = math.pi / 4
+                    shot_angle = math.pi / 6
                     best_shot_vector = best_shot_vector.flatten().normalize() * math.cos(shot_angle) + Vector3(0,0,1) * math.sin(shot_angle)
                     flattened = ball_location.z - best_shot_vector.z * 170 < 80
                     if flattened:

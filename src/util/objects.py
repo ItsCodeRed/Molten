@@ -24,6 +24,7 @@ class MoltenAgent(BaseAgent):
         self.stack = []
         #Game time
         self.time = 0.0
+        self.tick = 0
         #Whether or not GoslingAgent has run its get_ready() function
         self.ready = False
         #the controller that is returned to the framework after every tick
@@ -84,22 +85,25 @@ class MoltenAgent(BaseAgent):
         #Tells us when to go for kickoff
         self.kickoff = packet.game_info.is_round_active and packet.game_info.is_kickoff_pause
     def get_output(self,packet):
-        #Reset controller
-        self.controller.__init__()
-        #Get ready, then preprocess
-        if not self.ready:
-            self.get_ready(packet)
-        self.preprocess(packet)
-        
-        self.renderer.begin_rendering()
-        #Run our strategy code
-        self.run()
-        #run the routine on the end of the stack
-        if len(self.stack) > 0:
-            self.stack[-1].run(self)
-        self.renderer.end_rendering()
-        #send our updated controller back to rlbot
-        return self.controller
+        if self.tick < 25:
+            self.tick += 1
+        else:
+            #Reset controller
+            self.controller.__init__()
+            #Get ready, then preprocess
+            if not self.ready:
+                self.get_ready(packet)
+            self.preprocess(packet)
+            
+            self.renderer.begin_rendering()
+            #Run our strategy code
+            self.run()
+            #run the routine on the end of the stack
+            if len(self.stack) > 0:
+                self.stack[-1].run(self)
+            self.renderer.end_rendering()
+            #send our updated controller back to rlbot
+            return self.controller
     def run(self):
         #override this with your strategy code
         pass
@@ -368,30 +372,30 @@ class Vector3:
     #ie x+x, y+y, z+z
     #If using an operator with only a value, each dimension will be affected by that value
     #ie x+v, y+v, z+v
-    def __add__(self,value):
-        if isinstance(value,Vector3):
-            return Vector3(self[0]+value[0], self[1]+value[1], self[2]+value[2])
-        return Vector3(self[0]+value, self[1]+value, self[2]+value)
+    def __add__(self, value):
+        if hasattr(value, "__getitem__"):
+            return Vector3(self[0] + value[0], self[1] + value[1], self[2] + value[2])
+        return Vector3(self[0] + value, self[1] + value, self[2] + value)
     __radd__ = __add__
-    def __sub__(self,value):
-        if isinstance(value,Vector3):
-            return Vector3(self[0]-value[0],self[1]-value[1],self[2]-value[2])
-        return Vector3(self[0]-value,self[1]-value,self[2]-value)
+    def __sub__(self, value):
+        if hasattr(value, "__getitem__"):
+            return Vector3(self[0] - value[0], self[1] - value[1], self[2] - value[2])
+        return Vector3(self[0] - value, self[1] - value, self[2] - value)
     __rsub__ = __sub__
     def __neg__(self):
-        return Vector3(-self[0],-self[1],-self[2])
-    def __mul__(self,value):
-        if isinstance(value,Vector3):
-            return Vector3(self[0]*value[0], self[1]*value[1], self[2]*value[2])            
-        return Vector3(self[0]*value, self[1]*value, self[2]*value)
+        return Vector3(-self[0], -self[1], -self[2])
+    def __mul__(self, value):
+        if hasattr(value, "__getitem__"):
+            return Vector3(self[0] * value[0], self[1] * value[1], self[2] * value[2])
+        return Vector3(self[0] * value, self[1] * value, self[2] * value)
     __rmul__ = __mul__
-    def __truediv__(self,value):
-        if isinstance(value,Vector3):
-            return Vector3(self[0]/value[0], self[1]/value[1], self[2]/value[2])
-        return Vector3(self[0]/value, self[1]/value, self[2]/value)
-    def __rtruediv__(self,value):
-        if isinstance(value,Vector3):
-            return Vector3(value[0]/self[0],value[1]/self[1],value[2]/self[2])
+    def __truediv__(self, value):
+        if hasattr(value, "__getitem__"):
+            return Vector3(self[0] / value[0], self[1] / value[1], self[2] / value[2])
+        return Vector3(self[0] / value, self[1] / value, self[2] / value)
+    def __rtruediv__(self, value):
+        if hasattr(value, "__getitem__"):
+            return Vector3(value[0] / self[0], value[1] / self[1], value[2] / self[2])
         raise TypeError("unsupported rtruediv operands")
     def magnitude(self):
         #Magnitude() returns the length of the vector

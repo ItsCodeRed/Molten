@@ -41,7 +41,7 @@ class aerial():
 
         angle_from_ball = agent.me.forward.angle(self.shot_vector)
         angle_from_ball_sign = sign(agent.me.forward.anglesign(self.shot_vector))
-        max_angle = get_max_angle(time_remaining, 9.11, agent.me.angular_velocity[2] * angle_from_ball_sign)
+        max_angle = get_max_angle(time_remaining, angle_from_ball, 9.11, agent.me.angular_velocity[2] * angle_from_ball_sign)
 
         self.target_location = self.ball_location - self.shot_vector * car_ball_collision_offset(cap(angle_from_ball - max_angle, 0, math.pi * 2))
         
@@ -104,14 +104,11 @@ class aerial():
                 agent.controller.jump = 0
 
             delta_x = self.target_location - xf
+            delta_v = delta_x.dot(agent.me.forward) / time_remaining
             direction = delta_x.normalize()
-            if delta_x.magnitude() > 50:
-                freestyle_orient(agent, agent.me.local(delta_x))
-            else:
-                if self.shot_vector is not None:
-                    default_orient(agent, agent.me.local(self.shot_vector))
-                else:
-                    default_orient(agent, agent.me.local(self.ball_location - agent.me.location))
+            target = delta_x if delta_x.magnitude() > 50 else self.shot_vector
+            target = agent.me.local(target)
+            freestyle_orient(agent, target)
 
             if elapsed < 0.3 and self.counter == 3:
                 agent.controller.roll = 0
@@ -119,13 +116,13 @@ class aerial():
                 agent.controller.yaw = 0
                 agent.controller.steer = 0
 
-            if agent.me.forward.angle3D(direction) < 0.3:
-                if delta_x.magnitude() > 50:
+            if agent.me.forward.dot(direction) > 0.75:
+                if not self.jumping and delta_v >= boost_accel * 0.1:
                     agent.controller.boost = 1
                     agent.controller.throttle = 0
-                else:
-                    agent.controller.boost = 0
-                    agent.controller.throttle = cap(0.5 * throttle_accel * T ** 2, 0, 1)
+                    delta_v -= boost_accel * 0.1
+                if delta_v >= throttle_accel * 0.1:
+                    agent.controller.throttle = cap(delta_v / (throttle_accel * 0.1), -1, 1)
             else:
                 agent.controller.boost = 0
                 agent.controller.throttle = 0
@@ -212,8 +209,8 @@ class line_up_for_shot():
 
         angle_from_shot = car_to_target.angle(self.direction_vector)
         
-        adjustment = (angle_from_shot * distance / (3 - self.accuracy_multiplier)) * wall_mod
-        adjustment *= cap(time_remaining - self.time_before_jump, 0, self.time_before_jump) / self.time_before_jump
+        adjustment = (angle_from_shot * distance / (3.5 - self.accuracy_multiplier)) * wall_mod
+        adjustment *= cap(time_remaining - self.time_before_jump * 4, 0, self.time_before_jump * 4) / cap(self.time_before_jump * 4, 0.001, 6)
         adjusted_target = self.target_location + ((car_to_target_perp.normalize() * adjustment) if not agent.me.airborne else 0)
 
         if not is_on_wall(self.target_location, True):
@@ -227,7 +224,7 @@ class line_up_for_shot():
         for boost in agent.pads + agent.boosts:
             distance_to_boost = (boost.location - agent.me.location).magnitude()
             angle_to_boost = (boost.location - agent.me.location).angle(adjusted_target - agent.me.location)
-            if distance / (1 + agent.me.boost / 5) > angle_to_boost * distance_to_boost < boost_score and distance > 500 and angle_to_boost < 0.5 and boost.active and time_remaining > self.time_before_jump * 4:
+            if distance / (1 + agent.me.boost / 5) > angle_to_boost * distance_to_boost < boost_score and distance > 500 and angle_to_boost < 0.3 and boost.active and time_remaining > 3:
                 best_boost_location = boost.location
                 boost_score = angle_to_boost * distance_to_boost
 
@@ -267,7 +264,7 @@ class shoot():
         self.ball_location = ball_location
         self.intercept_time = intercept_time
         self.shot_vector = shot_vector
-        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.55
+        dodge_shot_angle = math.acos(shot_vector.flatten().magnitude()) + 0.275
         self.dodge_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
         self.dodge_point = self.ball_location - self.shot_vector.flatten().normalize() * 170
         self.direction = direction
@@ -287,20 +284,21 @@ class shoot():
         raw_time_remaining = self.intercept_time - agent.time
         time_remaining = cap(raw_time_remaining, 0.001, 10.0)
 
-        time_to_jump = 0.05 + cap((self.ball_location[2] - 92) / 500, 0, 1.5)
+        time_to_jump = find_jump_time(cap(self.dodge_point[2] - 90, 0, 300), True)
         time_until_dodge = cap(time_remaining - 0.1, 0.001, 10.0)
 
         car_to_ball = self.ball_location - agent.me.location
 
         angle_from_ball = agent.me.forward.angle(self.shot_vector)
         angle_from_ball_sign = sign(agent.me.forward.anglesign(self.shot_vector))
-        max_angle = get_max_angle(time_to_jump, 9.11, -agent.me.angular_velocity[2] * angle_from_ball_sign)
+        max_angle = get_max_angle(cap(time_to_jump - 0.16, 0.001, 1.5), angle_from_ball, 9.11, 0)
 
-        self.dodge_point = self.ball_location - self.shot_vector.flatten().normalize() * car_ball_collision_offset(cap(angle_from_ball - max_angle, 0, math.pi))
+        self.dodge_point = self.ball_location - self.shot_vector.flatten().normalize() * (5 + car_ball_collision_offset(cap(angle_from_ball - max_angle, 0, math.pi)))
 
         car_to_dodge_point = self.dodge_point - agent.me.location
         distance = car_to_dodge_point.flatten().magnitude()
         speed_required = distance / time_remaining
+        max_speed = cap(agent.me.velocity.magnitude() + 1000 * agent.me.boost / 30, 1410, 2300)
 
         perdicted_location = agent.me.location + agent.me.velocity * time_remaining
 
@@ -312,13 +310,13 @@ class shoot():
             self.shot_vector.cross(self.shot_vector.cross(Vector3(0, 0, 1))).normalize()
         )
         perdicted_hitbox.render(agent, [255,0,0])
-        on_target = (self.dodge_point - perdicted_location).flatten().magnitude() < 200
+        on_target = (self.dodge_point - perdicted_location).flatten().magnitude() < 150
         missing = not perdicted_hitbox.intersect_ball(self.ball_location)
 
         if not self.jumping:
             line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, time_to_jump * 2, 1).run(agent)
 
-            if time_until_dodge < 0 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
+            if raw_time_remaining < 0 or (speed_required - max_speed) * time_remaining > 45 or not shot_valid(agent, self):
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
@@ -330,7 +328,7 @@ class shoot():
                     agent.controller.jump = True
         else:
             elapsed = agent.time - self.time_of_jump
-            default_orient(agent, agent.me.local((car_to_ball + Vector3(0, 0, 250)).normalize()))
+            roll_orient(agent, agent.me.local(self.dodge_vector))
             # default_orient(agent, agent.me.local(agent.me.forward.flatten().normalize() * self.shot_vector.flatten().magnitude() + Vector3(0, 0, self.shot_vector.z)))
 
             if (raw_time_remaining > 0.1 and not shot_valid(agent, self, 60)) or raw_time_remaining <= -1 or (not agent.me.airborne and self.counter > 0):
@@ -343,7 +341,7 @@ class shoot():
                 #make sure we aren't jumping for at least 3 frames
                 agent.controller.jump = False
                 self.counter += 1
-            elif raw_time_remaining <= 0.1 and raw_time_remaining > -0.9:
+            elif raw_time_remaining <= 0.05 and raw_time_remaining > -0.9:
                 #dodge in the direction of the shot_vector
                 vector = agent.me.local(self.shot_vector)
                 #simulating a deadzone so that the dodge is more natural
@@ -406,12 +404,13 @@ class double_jump():
         car_to_ball = self.dodge_point - agent.me.location
         distance = car_to_ball.flatten().magnitude()
         speed_required = distance / time_remaining
+        max_speed = cap(agent.me.velocity.magnitude() + 1000 * agent.me.boost / 30, 1410, 2300)
 
         angle_from_shot = car_to_ball.angle(self.shot_vector)
 
         intercept_point = self.dodge_point + self.shot_vector * 95
 
-        time_to_jump = find_jump_time(cap(self.dodge_point[2] - agent.me.location[2], 0, 500), True)
+        time_to_jump = find_jump_time(cap(self.dodge_point[2], 0, 500), True)
 
         perdicted_location = perdict_car_location(agent.me, time_remaining) + \
             agent.me.up * jump_speed * time_remaining + \
@@ -432,11 +431,11 @@ class double_jump():
         if not self.jumping:
             line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, time_to_jump, 1).run(agent)
 
-            if time_remaining < time_to_jump * 0.8 or (speed_required - 2300) * time_remaining > 45 or not shot_valid(agent, self):
+            if time_remaining < time_to_jump * 0.8 or (speed_required - max_speed) * time_remaining > 20 or not shot_valid(agent, self):
                 agent.pop()
                 if agent.me.airborne:
                     agent.push(recovery())
-            elif not missing and (time_remaining < time_to_jump or on_target):
+            elif (not missing or on_target) and time_remaining < time_to_jump:
                 self.jumping = True 
                 if self.time_of_jump == -1:
                     elapsed = 0

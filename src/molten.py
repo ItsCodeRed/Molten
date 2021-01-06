@@ -118,16 +118,7 @@ class Molten(MoltenAgent):
             if agent.kickoff:
                 agent.push(kickoff(agent.me.location.x))
             else:
-                upfield_left = Vector3(-side(agent.index) * 4096, agent.ball.location.y - side(agent.index) * 1000, 0)
-                upfield_right = Vector3(side(agent.index) * 4096, agent.ball.location.y - side(agent.index) * 1000, 0)
-                targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "upfield":(upfield_left, upfield_right)}
-                shots = find_shots(agent, targets)
-                if shots["goal"] != None:
-                    agent.push(shots["goal"])
-                elif shots["upfield"] != None:
-                    agent.push(shots["upfield"])
-                else:
-                    agent.push(short_shot(agent.foe_goal.location))
+                attack(agent)
     
     def run(agent):
         # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
