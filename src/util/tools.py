@@ -37,7 +37,7 @@ def test_shot(agent, targets, selected_slice, hits):
         wall_distance, towards_wall = distance_to_wall(ball_location)
 
         if is_on_wall(ball_location, True) and abs(ball_location[0]) > 1000:
-            if is_on_wall(agent.me.location, False):
+            if is_on_wall(agent.me):
                 distance = car_to_ball.magnitude()
                 direction = car_to_ball.normalize()
             else:
@@ -48,57 +48,63 @@ def test_shot(agent, targets, selected_slice, hits):
             direction = car_to_ball.normalize()
 
         estimated_time = eta(agent.me, ball_location, direction, distance)
+        time_to_jump = find_jump_time(cap(ball_location[2] - agent.me.location[2], 1, 500), ball_location[2] > 300)
 
-        if estimated_time < time_remaining:
+        if estimated_time < time_remaining or ball_location.z > 640:
             for pair in targets:
                 if hits[pair] != None:
                     continue
                 #First we correct the target coordinates to account for the ball's radius
                 #If swapped == True, the shot isn't possible because the ball wouldn't fit between the targets
-                agent.line(targets[pair][0], targets[pair][0] + Vector3(0, 0, 500))
                 left, right, swapped = post_correction(ball_location, targets[pair][0], targets[pair][1])
-                print(Vector3(300, 500, 0) + Vector3(0, 0, 100)) 
                 if not swapped:
                     #Now we find the easiest direction to hit the ball in order to land it between the target points
                     left_vector = (left - ball_location)
                     right_vector = (right - ball_location)
-                    best_shot_vector = direction.clamp(left_vector, right_vector).normalize()
+                    shot_vector = direction.clamp(left_vector, right_vector).normalize()
 
                     car_final_vel = car_to_ball / time_remaining
-
-                    difference_in_vel = (car_final_vel - agent.me.velocity).magnitude()
+                    angle_offset = car_final_vel.angle(shot_vector)
                     
-                    shot_speed = ball_velocity.magnitude() * 3 + 500
+                    dodge_shot_speed = ball_velocity.magnitude() * 3 + car_final_vel.magnitude() * 0.1 + 500
+                    ball_to_targets = (targets[pair][0] + targets[pair][1]) / 2 - ball_location
 
-                    # shot_angle = find_shot_angle(shot_speed, target_location.flatten().magnitude(), target_location.z)
-                    best_shot_vector = (best_shot_vector * shot_speed - ball_velocity).normalize()
-                    shot_angle = math.pi / 6
-                    best_shot_vector = best_shot_vector.flatten().normalize() * math.cos(shot_angle) + Vector3(0,0,1) * math.sin(shot_angle)
-                    flattened = ball_location.z - best_shot_vector.z * 170 < 80
-                    if flattened:
-                        best_shot_vector.z = (ball_location.z - 80) / 170
-                        best_shot_vector = best_shot_vector.normalize()
+                    dodge_shot_angle = find_shot_angle(dodge_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
+                    dodge_max_angle = get_max_angle(cap(time_to_jump, 0.001, 1.5), abs(dodge_shot_angle) + 0.3, 11, 0.001)
+                    dodge_shot_angle = cap(dodge_shot_angle, -dodge_max_angle, dodge_max_angle)
+
+                    dodge_shot_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
+                    dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity - car_final_vel * 0.1).normalize()
+                    
+                    norm_shot_speed = ball_velocity.magnitude() * 1.5 + car_final_vel.magnitude() * 0.1 + 1
+
+                    norm_shot_angle = find_shot_angle(norm_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
+
+                    norm_shot_vector = shot_vector.flatten().normalize() * math.cos(norm_shot_angle) + Vector3(0,0,1) * math.sin(norm_shot_angle)
+                    norm_shot_vector = (norm_shot_vector * norm_shot_speed - ball_velocity - car_final_vel * 0.1).normalize()
+
+                    flattened = ball_location.z - norm_shot_vector.z * 170 < 70
                 
                     #Check to make sure our approach is inside the field
-                    if in_field(ball_location - (200*best_shot_vector), 1):
+                    if in_field(ball_location - (100*shot_vector), 1):
                         #The slope represents how close the car is to the chosen vector, higher = better
                         #A slope of 1.0 would mean the car is 45 degrees off
-                        slope = find_slope(best_shot_vector, car_to_ball)
+                        slope = find_slope(shot_vector, car_to_ball)
                         if is_on_wall(ball_location, True) and abs(ball_location[0]) > 1000:
-                            hits[pair] = wall_hit(ball_location, intercept_time, best_shot_vector.flatten_by_vector(towards_wall), 1)
-                        elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 2500:
-                            hits[pair] = pop_up(ball_location, intercept_time, best_shot_vector, 1)
-                        elif ball_location[2] - best_shot_vector[2] * 150 < 300:
-                            hits[pair] = shoot(ball_location, intercept_time, best_shot_vector, 1)
-                        elif ball_location[2] - best_shot_vector[2] * 150 < 500:
-                            hits[pair] = double_jump(ball_location, intercept_time, best_shot_vector, 1)
-                        else:
-                            aerial_attempt = aerial(ball_location, intercept_time, best_shot_vector, 1)
+                            hits[pair] = wall_hit(ball_location, intercept_time, dodge_shot_vector, 1)
+                        elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 1800:
+                            hits[pair] = pop_up(ball_location, intercept_time, norm_shot_vector, 1)
+                        elif ball_location[2] - dodge_shot_vector[2] * 120 < 260:
+                            hits[pair] = shoot(ball_location, intercept_time, dodge_shot_vector, 1)
+                        elif 360 < ball_location[2] -norm_shot_vector[2] * 150 < 520:
+                            hits[pair] = double_jump(ball_location, intercept_time, norm_shot_vector, 1)
+                        elif ball_location[2] -norm_shot_vector[2] * 150 > 520:
+                            aerial_attempt = aerial(ball_location, intercept_time, norm_shot_vector, 1)
                             if aerial_attempt.is_viable(agent, agent.time):
                                 hits[pair] = aerial_attempt
     return hits
 
-def find_fastest_hits(agent, cars):
+def find_next_hit(agent, cars):
     # goes through ball perdiction, and finds the soonest moment each car could possibly get to the ball
     # sets each cars next_hit fields to the moment in time it could get to soonest
     ball_prediction = agent.get_ball_prediction_struct()
@@ -109,19 +115,8 @@ def find_fastest_hits(agent, cars):
                     if test_hit(agent, car, ball_prediction.slices[index]) == "scored":
                         break
                     if test_hit(agent, car, ball_prediction.slices[index]):
-                        ball_location = Vector3(ball_prediction.slices[index].physics.location)
-                        ball_velocity = Vector3(ball_prediction.slices[index].physics.velocity)
-                        intercept_time = ball_prediction.slices[index].game_seconds
-                        eta = test_hit(agent, car, ball_prediction.slices[index], True)[1]
-                        car.next_hit = ball_moment(ball_location, ball_velocity, intercept_time, eta)
-                        cars = cars[cars != car]
-            if test_hit(agent, car, ball_prediction.slices[coarse_index]) == "scored":
-                break
-    
-    # if some cars couldn't make it to any of the slices in time, set the slices to the last slice.
-    if cars != []:
-        for car in cars:
-            car.next_hit = ball_moment(agent.ball.location, agent.ball.velocity, agent.time + 10, 10)
+                        return Vector3(ball_prediction.slices[index].physics.location)
+    return None
 
 def test_hit(agent, car, selected_slice, return_eta=False):
     #Gather some data about the slice
@@ -181,8 +176,10 @@ def attack(agent):
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post)}
         shot = find_shots(agent, targets)["goal"]
 
-        if shot != None:
+        if shot != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shot, aerial))):
             agent.push(shot)
+        elif agent.me.airborne:
+            agent.push(recovery())
         else:
             agent.push(short_shot(agent.foe_goal.location))
     elif isinstance(agent.stack[-1], goto):
@@ -207,10 +204,12 @@ def save(agent):
         upfield_right = Vector3(side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 1000)
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "upfield":(upfield_left, upfield_right)}
         shots = find_shots(agent, targets)
-        if shots["upfield"] != None:
+        if shots["upfield"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["upfield"], aerial))):
             agent.push(shots["upfield"])
-        elif shots["goal"] != None:
+        elif shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))):
             agent.push(shots["goal"])
+        elif agent.me.airborne:
+            agent.push(recovery())
         else:
             agent.push(short_shot(agent.foe_goal.location))
     elif isinstance(agent.stack[-1], goto):

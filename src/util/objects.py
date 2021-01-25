@@ -25,6 +25,9 @@ class MoltenAgent(BaseAgent):
         #Game time
         self.time = 0.0
         self.tick = 0
+        self.update_time = 0
+        self.latest_touched_time = 0
+        self.first_pos = Vector3(0,0,0)
         #Whether or not GoslingAgent has run its get_ready() function
         self.ready = False
         #the controller that is returned to the framework after every tick
@@ -416,6 +419,9 @@ class Vector3:
         return self[0]*value[0] + self[1]*value[1] + self[2]*value[2]
     def cross(self,value):
         return Vector3((self[1]*value[2]) - (self[2]*value[1]),(self[2]*value[0]) - (self[0]*value[2]),(self[0]*value[1]) - (self[1]*value[0]))
+    def distance(self,value):
+        #returns the distance between vectors
+        return (value - self).magnitude()
     def flatten(self):
         #Sets Z (Vector3[2]) to 0
         return Vector3(self[0],self[1],0)

@@ -13,11 +13,23 @@ def perdict_car_location(car, time, gravity = 650):
     #Finds the cars location after a certain amount of time
     return car.location + car.velocity * time + 0.5 * Vector3(0, 0, -gravity) * time ** 2
 
-def eta(car, target, direction, distance):
-    forward_angle = direction.angle(car.forward)
-    car_to_target = target - car.location
-    int_vel = car.velocity.dot(car_to_target)
-    return (distance * 1.05) / cap(int_vel + 1000 * car.boost / 30, 1410, 2300) + (forward_angle * 0.318)
+def is_back(agent, car):
+    team = agent.team if car in agent.friends or car == agent.me else abs(agent.team - 1)
+    goal = Vector3(0, 5100 * side(team), 0)
+    return car.location.distance(goal) < agent.first_pos.distance(goal) + 400
+
+def eta(car, target, direction=None, distance=None):
+    if direction != None and distance != None:
+        forward_angle = direction.angle(car.forward) * cap(distance - 300, 0, 300) / 300
+        car_to_target = target - car.location
+        int_vel = car.velocity.dot(car_to_target)
+        return distance / cap(int_vel + 1000 * car.boost / 30, 1410, 2300) + (forward_angle * 0.318)
+    else:
+        car_to_target = target - car.location
+        forward_angle = car_to_target.angle(car.forward) * cap(car_to_target.magnitude() - 300, 0, 300) / 300
+        int_vel = car.velocity.dot(car_to_target.normalize())
+        return car_to_target.magnitude() / cap(int_vel + 1000 * car.boost / 30, 1410, 2300) + (forward_angle * 0.318)
+
     # car_to_target = target - car.location
 
     # forward_angle = abs(abs(direction.angle(car.forward)) - (math.pi / 2) if abs(direction.angle(car.forward)) > math.pi / 2 else 0)
@@ -180,7 +192,7 @@ def roll_orient(agent, local_target, direction = 1.0):
     target_angles = [
         math.atan2(local_target[2],local_target[0]) * abs(math.cos(yaw_angle)), #angle required to pitch towards target
         math.atan2(local_target[1],local_target[0]), #angle required to yaw towards target
-        math.atan2(local_target[2],abs(local_target[1])) * -local_target[1]] #angle required to roll towards target
+        math.atan2(local_target[2],abs(local_target[1])) * -sign(local_target[1])] #angle required to roll towards target
     #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
     agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/6)
@@ -238,8 +250,8 @@ def distance_to_wall(point):
     #determines how close the car is to the wall
     abs_point = Vector3(abs(point[0]), abs(point[1]), abs(point[2]))
 
-    distance_to_side_wall = 4096 - abs_point[0]
-    distance_to_back_wall = 5120 - abs_point[1]
+    distance_to_side_wall = 4096 - abs_point[0] if abs_point[1] < 5120 else 800 - abs_point[0]
+    distance_to_back_wall = 5120 - abs_point[1] if abs_point[0] > 800 else 5920 - abs_point[1]
     distance_to_corner = math.sqrt(2) * ((8064 - abs_point[0] - abs_point[1]) / 2)
     if distance_to_corner > distance_to_side_wall < distance_to_back_wall:
         return distance_to_side_wall, Vector3(sign(point[0]), 0, 0)
@@ -248,13 +260,17 @@ def distance_to_wall(point):
     else:
         return distance_to_corner, Vector3(sign(point[0]) / math.sqrt(2), sign(point[1]) / math.sqrt(2), 0)
 
-def is_on_wall(point, try_to_reach):
-    distance = distance_to_wall(point)[0]
+def is_on_wall(point, try_to_reach=False):
+    if isinstance(point, Vector3):
+        distance = distance_to_wall(point)[0]
 
-    if try_to_reach:
-        return distance < 300 < point[2]
+        if try_to_reach:
+            return distance < 300 < point[2]
+        else:
+            return distance < 150 or distance < point[2] + 100 < 400
     else:
-        return distance < 150
+        return point.location.z > 50 and not point.airborne
+        
 
 def find_slope(shot_vector,car_to_target):
     #Finds the slope of your car's position relative to the shot vector (shot vector is y axis)
@@ -326,6 +342,15 @@ def steer(angle, rate):
     #A Proportional-Derivative control loop used for defaultPD
     return cap(((35*(angle+rate))**3)/10, -1.0, 1.0)
 
+def within_turn_radius(car, location):
+    location = location.flatten()
+    turn_radius = find_turn_radius(car.velocity.dot(car.forward))
+
+    left_turn_center = (car.location + car.left.flatten().normalize() * turn_radius).flatten()
+    right_turn_center = (car.location - car.left.flatten().normalize() * turn_radius).flatten()
+
+    return (location.distance(left_turn_center) < turn_radius or location.distance(right_turn_center) < turn_radius) and not is_on_wall(car)
+
 def find_turn_radius(speed):
     if (speed <= 500):
         radius = lerp(145, 251, speed / 500)
@@ -362,7 +387,7 @@ def find_shot_angle(s, x, y):
     g = 650 # gravity constant
     
     if s**4 - g * (g * x**2 + 2 * y * s**2) < 0:
-        return math.pi / 4 # not possible to hit target at speed without hitting ground, so angle defaults to 0
+        return math.pi / 6 # not possible to hit target at speed without hitting ground, so angle defaults to 0
     else:
         shot_angle_1 = math.atan2(s**2 + math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)
         shot_angle_2 = math.atan2(s**2 - math.sqrt(s**4 - g * (g * x**2 + 2 * y * s**2)), g * x)

@@ -5,41 +5,49 @@ from util.tools import *
 
 class Molten(MoltenAgent):
 
-    def onevsone_strats(agent):
+    def solo_strat(agent):
         ball_location = agent.ball.location
-
         ball_to_me = ball_location - agent.me.location
-        my_distance = ball_to_me.magnitude()
-
         my_goal_location = agent.friend_goal.location
-        my_goal_distance_to_me = (my_goal_location - agent.me.location).magnitude()
-        my_goal_distance_to_ball = (my_goal_location - ball_location).magnitude()
 
-        foe_goal_location = agent.foe_goal.location
-        foe_goal_distance_to_ball = (foe_goal_location - ball_location).magnitude()
+        if len(agent.foes) > 0:
+            closest_foe = agent.foes[0]
+            for foe in agent.foes:
+                if foe.location.distance(ball_location) < closest_foe.location.distance(ball_location):
+                    closest_foe = foe
 
-        ball_to_foe = ball_location - agent.foes[0].location
-        foe_distance = ball_to_foe.magnitude()
+            my_eta = eta(agent.me, ball_location, (ball_location - agent.me.location).normalize(), agent.me.location.distance(ball_location))
+            foe_eta = eta(closest_foe, ball_location, (ball_location - closest_foe.location).normalize(), closest_foe.location.distance(ball_location))
 
-        my_eta = eta(agent.me, ball_location, ball_to_me.normalize(), my_distance)
-        foe_eta = eta(agent.foes[0], ball_location, ball_to_foe.normalize(), foe_distance)
+            enemy_approaching = closest_foe.velocity.dot(ball_location - closest_foe.location) > 0
 
-        shot_incoming = (my_goal_location - (ball_location + agent.foes[0].velocity + agent.ball.velocity)).magnitude() < 4000
+            shot_incoming = (my_goal_location - (ball_location + closest_foe.velocity + agent.ball.velocity)).magnitude() < 4000
 
-        shadow_pos = (my_goal_location + ball_location + agent.foes[0].velocity).flatten() / 2
-        distance_to_shadow = (shadow_pos - agent.me.location).flatten().magnitude()
+            shadow_pos = (my_goal_location + ball_location + closest_foe.velocity).flatten() / 2
+            shadow_pos.x = cap(shadow_pos.x - sign(shadow_pos.x) * 1000, -3500, 3500)
+            shadow_pos.y = cap(shadow_pos.y, -4500, 4500)
 
-        upfield_left = Vector3(-side(agent.index) * 4096, ball_location.y - side(agent.index) * 1000, 0)
-        upfield_right = Vector3(side(agent.index) * 4096, ball_location.y - side(agent.index) * 1000, 0)
-
-        if agent.kickoff and len(agent.stack) < 1:
-            agent.push(kickoff(agent.me.location.x))
-        elif shot_incoming:
-            save(agent)
+            if agent.kickoff and len(agent.stack) < 1:
+                agent.push(kickoff(agent.me.location.x))
+            elif my_eta - 0.2 > foe_eta and not shot_incoming and enemy_approaching:
+                if len(agent.stack) < 1:
+                    agent.push(goto(shadow_pos, ball_to_me, 2300))
+                elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
+                    agent.pop()
+                elif isinstance(agent.stack[-1], goto):
+                    agent.stack[-1].update(shadow_pos, ball_to_me, 2300)
+            elif shot_incoming:
+                save(agent)
+            else:
+                attack(agent)
         else:
-            attack(agent)
+            if agent.kickoff and len(agent.stack) < 1:
+                agent.push(kickoff(agent.me.location.x))
+            else:
+                attack(agent)
 
-    def twovstwo_strats(agent):
+
+    def duo_strat(agent):
         ball_location = agent.ball.location
 
         ball_to_me = ball_location - agent.me.location
@@ -65,12 +73,6 @@ class Molten(MoltenAgent):
         else:
             agent.rotation_index = 1
 
-        ball_to_foe_one = ball_location - agent.foes[0].location
-        ball_to_foe_two = ball_location - agent.foes[1].location
-
-        foe_one_eta = eta(agent.foes[0], ball_location, ball_to_foe_one.normalize(), ball_to_foe_one.magnitude())
-        foe_two_eta = eta(agent.foes[1], ball_location, ball_to_foe_two.normalize(), ball_to_foe_two.magnitude())
-
         foe_goal_distance_to_foe_one = (agent.foe_goal.location - agent.foes[0].location).magnitude()
         foe_goal_distance_to_foe_two = (agent.foe_goal.location - agent.foes[1].location).magnitude()
         foe_goal_distance_to_ball = (agent.foe_goal.location - agent.ball.location).magnitude()
@@ -78,13 +80,14 @@ class Molten(MoltenAgent):
         foe_one_back = foe_goal_distance_to_foe_one < foe_goal_distance_to_ball
         foe_two_back = foe_goal_distance_to_foe_two < foe_goal_distance_to_ball
 
-        if (foe_one_eta < foe_two_eta and foe_one_back == foe_two_back) or (foe_one_back and not foe_two_back):
-            closest_foe = agent.foes[0]
-        else:
-            closest_foe = agent.foes[1]
+        closest_foe = agent.foes[0]
+        for foe in agent.foes:
+            if foe.location.distance(ball_location) < closest_foe.location.distance(ball_location):
+                closest_foe = foe
 
         shadow_pos = (my_goal_location + ball_location + closest_foe.velocity).flatten() / 2
-        shadow_pos.x = -shadow_pos.x / 2
+        shadow_pos.x = cap(shadow_pos.x - sign(shadow_pos.x) * 1000, -3500, 3500)
+        shadow_pos.y = cap(shadow_pos.y, -4500, 4500)
         distance_to_shadow = (shadow_pos - agent.me.location).flatten().magnitude()
 
         if agent.rotation_index == 0:
@@ -112,8 +115,100 @@ class Molten(MoltenAgent):
                     agent.pop()
                 elif isinstance(agent.stack[-1], goto):
                     agent.stack[-1].update(shadow_pos, ball_to_me, 1400)
+
+    def team_strat(agent):
+        ball_location = agent.ball.location
+        my_goal_location = agent.friend_goal.location
+
+        ball_to_me = ball_location - agent.me.location
+
+        if agent.time > agent.update_time or agent.latest_touched_time != agent.ball.latest_touched_time:
+            cars = agent.friends.copy()
+            cars.extend(agent.foes)
+            cars.append(agent.me)
+            focus = find_next_hit(agent, cars)
+            agent.first_pos = focus if focus != None else ball_location
+            agent.latest_touched_time = agent.ball.latest_touched_time
+            agent.update_time = agent.time + 0.1
+
+        closest_foe = agent.foes[0]
+        for foe in agent.foes:
+            if (eta(foe, agent.first_pos) < eta(closest_foe, agent.first_pos) and is_back(agent, foe) == is_back(agent, closest_foe)) or (is_back(agent, foe) and not is_back(agent, closest_foe)):
+                closest_foe = foe
+
+        second_pos = (my_goal_location + agent.first_pos * 3).flatten() / 4
+        second_pos.x = cap(second_pos.x / 2 - sign(second_pos.x) * cap((5200 + side(agent.team) * agent.first_pos.y) / 4, 600, 3600), -3500, 3500)
+        second_pos.y = cap(second_pos.y, -4000, 4000)
+
+        third_pos = my_goal_location.flatten()
+
+        first_mate = None
+        friends_back = 0
+        for friend in agent.friends:
+            if first_mate == None or (eta(friend, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)):
+                first_mate = friend
+            if is_back(agent, friend):
+                friends_back += 1
+        
+        second_mate = None
+        for friend in agent.friends:
+            if (second_mate == None or (eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate))) and friend.index != first_mate.index:
+                second_mate = friend
+
+        third_mate = None
+        for friend in agent.friends:
+            if (third_mate == None or (eta(friend, third_pos) < eta(third_mate, third_pos) and is_back(agent, friend) == is_back(agent, third_mate)) or (is_back(agent, friend) and not is_back(agent, third_mate))) and friend.index != first_mate.index and friend.index != second_mate.index:
+                third_mate = friend
+
+        if first_mate == None or (eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, agent.me) == is_back(agent, first_mate)) or (is_back(agent, agent.me) and not is_back(agent, first_mate)):
+            agent.rotation_index = 0
+        elif second_mate == None or (eta(agent.me, second_pos) < eta(second_mate, second_pos) and is_back(agent, agent.me) == is_back(agent, second_mate)) or (is_back(agent, agent.me) and not is_back(agent, second_mate)):
+            agent.rotation_index = 1
+        elif third_mate == None or (eta(agent.me, third_pos) < eta(third_mate, third_pos) and is_back(agent, agent.me) == is_back(agent, third_mate)) or (is_back(agent, agent.me) and not is_back(agent, third_mate)):
+            agent.rotation_index = 2
+        else:
+            agent.rotation_index = 3
+
+        if agent.rotation_index == 0:
+            if agent.kickoff:
+                if agent.me.airborne and len(agent.stack) < 1:
+                    agent.push(recovery())
+                elif len(agent.stack) < 1:
+                    agent.push(kickoff(agent.me.location.x))
+                elif isinstance(agent.stack[-1], goto):
+                    agent.pop()
+            elif sign(agent.first_pos.y) == side(agent.team) and is_back(agent, closest_foe):
+                save(agent)
+            else:
+                attack(agent)
+        elif agent.rotation_index == 1:
+            if agent.me.airborne and len(agent.stack) < 1:
+                agent.push(recovery())
+            elif friends_back == 1 and is_back(agent, agent.me):
+                if len(agent.stack) < 1:
+                    agent.push(goto(third_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200))
+                elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
+                    agent.pop()
+                elif isinstance(agent.stack[-1], goto):
+                    agent.stack[-1].update(third_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200)
+            else:
+                if len(agent.stack) < 1:
+                    agent.push(goto(second_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200))
+                elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
+                    agent.pop()
+                elif isinstance(agent.stack[-1], goto):
+                    agent.stack[-1].update(second_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200)
+        else:
+            if agent.me.airborne and len(agent.stack) < 1:
+                agent.push(recovery())
+            elif len(agent.stack) < 1:
+                agent.push(goto(third_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200))
+            elif not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
+                agent.pop()
+            elif isinstance(agent.stack[-1], goto):
+                agent.stack[-1].update(third_pos, ball_to_me, 1410 if is_back(agent, agent.me) else 2300, (5200 - side(agent.team) * agent.first_pos.y) / 5200)
     
-    def atba_strats(agent):
+    def atba_strat(agent):
         if len(agent.stack) < 1:
             if agent.kickoff:
                 agent.push(kickoff(agent.me.location.x))
@@ -123,15 +218,14 @@ class Molten(MoltenAgent):
     def run(agent):
         # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()
-        agent.me.debug_next_hit(agent)
         agent.me.hitbox.render(agent, [255, 255, 255])
 
-        is_twovstwo = len(agent.foes) == len(agent.friends) + 1 == 2
-        is_onevsone = len(agent.foes) == len(agent.friends) + 1 == 1
-        if is_onevsone:
-            Molten.onevsone_strats(agent)
-        elif is_twovstwo:
-            Molten.twovstwo_strats(agent)
+        if len(agent.friends) == 0:
+            Molten.solo_strat(agent)
+        elif len(agent.friends) == 1:
+            Molten.duo_strat(agent)
+        elif len(agent.friends) > 1:
+            Molten.solo_strat(agent)
         else:
-            Molten.atba_strats(agent)
+            Molten.atba_strat(agent)
 

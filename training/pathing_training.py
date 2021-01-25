@@ -11,7 +11,6 @@ from rlbottraining.grading.grader import Grader
 from rlbottraining.training_exercise import TrainingExercise, Playlist
 
 import training_util
-from drive_to_ball_grader import DriveToBallGrader
 
 
 def make_match_config_with_my_bot() -> MatchConfig:
@@ -38,30 +37,90 @@ def add_my_bot_to_playlist(exercises: Playlist) -> Playlist:
 
 
 @dataclass
-class Pathing(StrikerExercise):
-    """
-    Drops the ball from a certain height, requiring the bot to not drive
-    underneath the ball until it's in reach.
-    """
-
-    car_start_x: float = 0
-
+class OpenNet(StrikerExercise):
     def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
+
         return GameState(
             ball=BallState(physics=Physics(
                 location=Vector3(0, 2000, 100),
+                velocity=Vector3(0, 0, 1000),
+                angular_velocity=Vector3(0, 0, 0))),
+            cars={
+                0: CarState(
+                    physics=Physics(
+                        location=Vector3(0, 0, 100),
+                        rotation=Rotator(0, pi/2, 0),
+                        velocity=Vector3(0, 0, 0),
+                        angular_velocity=Vector3(0, 0, 0)),
+                    jumped=False,
+                    double_jumped=False,
+                    boost_amount=100)
+            },
+            boosts={i: BoostState(0) for i in range(34)},
+        )
+
+@dataclass
+class ToughAngle(StrikerExercise):
+    def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
+        return GameState(
+            ball=BallState(physics=Physics(
+                location=Vector3(3500, 4000, 100),
+                velocity=Vector3(0, 0, 1000),
+                angular_velocity=Vector3(0, 0, 0))),
+            cars={
+                0: CarState(
+                    physics=Physics(
+                        location=Vector3(1000, 2800, 100),
+                        rotation=Rotator(0, -pi, 0),
+                        velocity=Vector3(0, 0, 0),
+                        angular_velocity=Vector3(0, 0, 0)),
+                    jumped=False,
+                    double_jumped=False,
+                    boost_amount=100)
+            },
+            boosts={i: BoostState(0) for i in range(34)},
+        )
+
+@dataclass
+class WallShot(StrikerExercise):
+    def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
+        return GameState(
+            ball=BallState(physics=Physics(
+                location=Vector3(2000, 1000, 100),
+                velocity=Vector3(2000, rng.uniform(-500, 500), 0),
+                angular_velocity=Vector3(0, 0, 0))),
+            cars={
+                0: CarState(
+                    physics=Physics(
+                        location=Vector3(1000, -1000, 100),
+                        rotation=Rotator(0, 0, 0),
+                        velocity=Vector3(0, 0, 0),
+                        angular_velocity=Vector3(0, 0, 0)),
+                    jumped=False,
+                    double_jumped=False,
+                    boost_amount=100)
+            },
+            boosts={i: BoostState(0) for i in range(34)},
+        )
+
+@dataclass
+class SideShot(StrikerExercise):
+    def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
+        return GameState(
+            ball=BallState(physics=Physics(
+                location=Vector3(0, 2500, 100),
                 velocity=Vector3(0, 0, rng.uniform(0, 1500)),
                 angular_velocity=Vector3(0, 0, 0))),
             cars={
                 0: CarState(
                     physics=Physics(
-                        location=Vector3(rng.uniform(-2000, 2000), rng.uniform(-1000, 1000), 100),
+                        location=Vector3(rng.uniform(3000, 4000), rng.uniform(2000, 3000), 100),
                         rotation=Rotator(0, rng.uniform(0, pi), 0),
                         velocity=Vector3(0, 0, 0),
                         angular_velocity=Vector3(0, 0, 0)),
                     jumped=False,
                     double_jumped=False,
-                    boost_amount=0)
+                    boost_amount=100)
             },
             boosts={i: BoostState(0) for i in range(34)},
         )
