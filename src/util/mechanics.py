@@ -90,7 +90,7 @@ class aerial():
             if not self.jumping and delta_v >= boost_accel * 0.1:
                 agent.controller.boost = 1
                 agent.controller.throttle = 0
-                delta_v -= boost_accel * 0.01666667
+                delta_v -= boost_accel * 0.1
             if delta_v >= throttle_accel * 0.1:
                 agent.controller.throttle = cap(delta_v / (throttle_accel * 0.1), -1, 1)
         else:
@@ -286,7 +286,7 @@ class shoot():
         perdicted_location = agent.me.location + agent.me.velocity * time_remaining
 
         perdicted_hitbox = agent.me.hitbox
-        perdicted_hitbox.location = perdicted_location.flatten() + self.shot_vector.flatten().normalize() * 50
+        perdicted_hitbox.location = perdicted_location.flatten()
         perdicted_hitbox.orientation = Matrix3(
             self.shot_vector,
             self.shot_vector.cross(Vector3(0, 0, 1)).normalize(),
@@ -297,7 +297,7 @@ class shoot():
         missing = not perdicted_hitbox.intersect_ball(self.ball_location.flatten())
 
         if not self.jumping:
-            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, self.time_to_jump * 2, 0).run(agent)
+            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, self.time_to_jump, 1).run(agent)
 
             if raw_time_remaining < 0 or speed_required > 2300 or not shot_valid(agent, self):
                 agent.pop()
@@ -333,8 +333,10 @@ class shoot():
                 agent.push(flip(vector))
             elif raw_time_remaining <= (self.dodge_point - perdicted_location).flatten().magnitude() / 500 and raw_time_remaining > -0.9 and missing:
                 #dodge in the direction of the shot_vector
+                local_shot_vector = agent.me.local(self.shot_vector)
                 vector = agent.me.local((self.ball_location - perdicted_location).flatten().normalize())
                 vector[0] = vector[0] if abs(vector[0]) > 0.2 else 0 
+                vector[1] = vector[1] if not (vector[1] < 0 and local_shot_vector[1] > 0) else local_shot_vector[1]
                 vector[1] = vector[1] if abs(vector[1]) > 0.3 else 0
                 agent.pop()
                 agent.push(flip(vector))
@@ -671,7 +673,7 @@ class kickoff():
         straight_kickoff = abs(agent.me.location.x) < 100
         team = -side(agent.team)
 
-        steer = self.side * team if corner_kickoff else -self.side * team
+        steer = -self.side * team
         local_car_to_ball = agent.me.local(car_to_ball)
 
         speed_flip_vector = Vector3(1/math.sqrt(2), -steer/math.sqrt(2), 0)
@@ -680,35 +682,42 @@ class kickoff():
             agent.pop()
 
         if self.corner_kickoff:
-            if elapsed < 0.23:
-                agent.controller.steer = steer / 4
+            if elapsed < 0.15:
                 default_throttle(agent, 2300)
-            elif elapsed < 0.3:
+            elif elapsed < 0.275:
+                agent.controller.steer = steer
+                default_throttle(agent, 2300)
+            elif elapsed < 0.4:
                 agent.push(flip(speed_flip_vector, True, True))
+            elif elapsed < 1.75:
+                default_orient(agent, local_car_to_ball)
+                default_throttle(agent, 2300)
             elif elapsed < 2:
                 agent.push(flip(local_car_to_ball))
         elif self.straight_kickoff:
-            if elapsed < 0.4:
-                agent.controller.steer = steer / 4
+            if elapsed < 0.24:
+                default_throttle(agent, 2300)
+            elif elapsed < 0.32:
+                agent.controller.steer = steer
                 default_throttle(agent, 2300)
             elif elapsed < 0.5:
                 agent.push(flip(speed_flip_vector, True, True))
-            elif elapsed < 2.2:
+            elif elapsed < 2.3:
                 default_orient(agent, local_car_to_ball)
                 default_throttle(agent, 2300)
-                agent.controller.handbrake = True
-            elif elapsed < 3:
+            elif elapsed < 2.7:
                 agent.push(flip(local_car_to_ball))
         else:
-            if elapsed < 0.3:
-                agent.controller.steer = steer / 4
+            if elapsed < 0.2:
+                default_throttle(agent, 2300)
+            elif elapsed < 0.25:
+                agent.controller.steer = steer
                 default_throttle(agent, 2300)
             elif elapsed < 0.5:
                 agent.push(flip(speed_flip_vector, True, True))
-            elif elapsed < 2:
+            elif elapsed < 1.95:
                 default_orient(agent, local_car_to_ball)
                 default_throttle(agent, 2300)
-                agent.controller.handbrake = True
             elif elapsed < 3:
                 agent.push(flip(local_car_to_ball))
 
@@ -733,12 +742,12 @@ class flip():
             self.time = agent.time
         else:
             elapsed = agent.time - self.time
-        if elapsed < 0.15 and not self.jumped:
+        if elapsed < 0.1 and not self.jumped:
             agent.controller.jump = True
-        elif elapsed >=0.15 and self.counter < 3 and not self.jumped:
+        elif elapsed >=0.1 and self.counter < 3 and not self.jumped:
             agent.controller.jump = False
             self.counter += 1
-        elif elapsed < 0.3 or (not self.cancel and elapsed < 0.9):
+        elif elapsed < 0.25 or (not self.cancel and elapsed < 0.85):
             agent.controller.jump = True
             agent.controller.pitch = self.pitch
             agent.controller.yaw = self.yaw
