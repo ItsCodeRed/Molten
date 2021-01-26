@@ -297,7 +297,7 @@ class shoot():
         missing = not perdicted_hitbox.intersect_ball(self.ball_location.flatten())
 
         if not self.jumping:
-            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, self.time_to_jump, 1).run(agent)
+            line_up_for_shot(self.dodge_point, speed_required, self.intercept_time, self.shot_vector, self.time_to_jump, 0.5).run(agent)
 
             if raw_time_remaining < 0 or speed_required > 2300 or not shot_valid(agent, self):
                 agent.pop()
@@ -684,7 +684,7 @@ class kickoff():
         if self.corner_kickoff:
             if elapsed < 0.15:
                 default_throttle(agent, 2300)
-            elif elapsed < 0.275:
+            elif elapsed < 0.27:
                 agent.controller.steer = steer
                 default_throttle(agent, 2300)
             elif elapsed < 0.4:

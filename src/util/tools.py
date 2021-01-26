@@ -66,7 +66,7 @@ def test_shot(agent, targets, selected_slice, hits):
                     car_final_vel = car_to_ball / time_remaining
                     angle_offset = car_final_vel.angle(shot_vector)
                     
-                    dodge_shot_speed = ball_velocity.magnitude() * 3 + car_final_vel.magnitude() * 0.1 + 500
+                    dodge_shot_speed = ball_velocity.magnitude() * 3 + car_final_vel.magnitude() * 0.2 + 500
                     ball_to_targets = (targets[pair][0] + targets[pair][1]) / 2 - ball_location
 
                     dodge_shot_angle = find_shot_angle(dodge_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
@@ -74,14 +74,14 @@ def test_shot(agent, targets, selected_slice, hits):
                     dodge_shot_angle = cap(dodge_shot_angle, -dodge_max_angle, dodge_max_angle)
 
                     dodge_shot_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
-                    dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity - car_final_vel * 0.1).normalize()
+                    dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity - car_final_vel * 0.2).normalize()
                     
-                    norm_shot_speed = ball_velocity.magnitude() * 1.5 + car_final_vel.magnitude() * 0.1 + 1
+                    norm_shot_speed = ball_velocity.magnitude() * 1.5 + car_final_vel.magnitude() * 0.2 + 1
 
                     norm_shot_angle = find_shot_angle(norm_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
 
                     norm_shot_vector = shot_vector.flatten().normalize() * math.cos(norm_shot_angle) + Vector3(0,0,1) * math.sin(norm_shot_angle)
-                    norm_shot_vector = (norm_shot_vector * norm_shot_speed - ball_velocity - car_final_vel * 0.1).normalize()
+                    norm_shot_vector = (norm_shot_vector * norm_shot_speed - ball_velocity - car_final_vel * 0.2).normalize()
 
                     flattened = ball_location.z - norm_shot_vector.z * 170 < 70
                 
