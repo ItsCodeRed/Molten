@@ -227,7 +227,7 @@ class line_up_for_shot():
                 agent.controller.throttle = -1
 
         agent.controller.boost = False if abs(angles[1]) > 0.3 or agent.me.airborne else agent.controller.boost
-        agent.controller.handbrake = True if abs(angles[1]) > 2 or within_turn_radius(agent.me, self.target_location) else agent.controller.handbrake
+        agent.controller.handbrake = True if abs(angles[1]) > 2.3 or within_turn_radius(agent.me, self.target_location) else agent.controller.handbrake
 
         agent.line(agent.me.location, self.target_location)
         agent.line(self.target_location-Vector3(0, 0, 100), self.target_location + Vector3(0, 0, 100), [255, 0, 0])
@@ -610,14 +610,8 @@ class goto():
 
         angle_from_shot = car_to_target.angle(self.direction_vector)
         
-        adjustment = angle_from_shot * distance / 3
+        adjustment = angle_from_shot * distance / 2
         adjusted_target = self.target_location + ((car_to_target_perp.normalize() * adjustment) if not agent.me.airborne else 0)
-
-        if not is_on_wall(self.target_location, True):
-            if abs(adjusted_target.x) > 4096 + distance_to_wall(agent.me.location)[0]:
-                adjusted_target = adjusted_target + car_to_target_perp.normalize() * (((4000 + distance_to_wall(agent.me.location)[0]) * sign(adjusted_target.x) - adjusted_target.x) / car_to_target_perp.normalize().x)
-            if abs(adjusted_target.y) > 5120 + distance_to_wall(agent.me.location)[0]:
-                adjusted_target = adjusted_target + car_to_target_perp.normalize() * (((5000 + distance_to_wall(agent.me.location)[0]) * sign(adjusted_target.y) - adjusted_target.y) / car_to_target_perp.normalize().y)
 
         large_boost_multiplier = (100.1 - agent.me.boost) / cap(100.1 - agent.me.boost, 0, 12)
 
@@ -627,7 +621,7 @@ class goto():
             distance_to_boost = (boost.location - agent.me.location).magnitude()
             angle_to_boost = (boost.location - agent.me.location).angle(adjusted_target - agent.me.location)
             if distance / (1 + agent.me.boost / 10) > angle_to_boost * distance_to_boost / (large_boost_multiplier if boost.large else 1) < boost_score and \
-                boost.active and 700 * self.time_to_spare > angle_to_boost * distance_to_boost / (large_boost_multiplier if boost.large else 1):
+                boost.active and 1000 * self.time_to_spare > angle_to_boost * distance_to_boost / (large_boost_multiplier if boost.large else 1):
                 best_boost_location = boost.location
                 boost_score = angle_to_boost * distance_to_boost / (large_boost_multiplier if boost.large else 1)
 
@@ -652,7 +646,7 @@ class goto():
             agent.push(flip(local_target))
 
         agent.controller.boost = False if abs(angles[1]) > 0.3 or agent.me.airborne or not self.boosting else agent.controller.boost
-        agent.controller.handbrake = True if abs(angles[1]) > 2 else agent.controller.handbrake
+        agent.controller.handbrake = True if abs(angles[1]) > 2.3 or within_turn_radius(agent.me, adjusted_target) else agent.controller.handbrake
 
         agent.line(agent.me.location, self.target_location)
         agent.line(self.target_location-Vector3(0, 0, 100), self.target_location + Vector3(0, 0, 100), [255, 0, 0])
