@@ -1,5 +1,5 @@
 import math
-from util.objects import Vector3
+from util.objects import Vector3, Matrix3
 
 def find_acceleration(target, car, time, gravity = 650):
     #Finds the acceleration required for a car to reach a target in a specific amount of time
@@ -15,7 +15,7 @@ def perdict_car_location(car, time, gravity = 650):
 
 def is_back(agent, car):
     team = agent.team if car in agent.friends or car == agent.me else abs(agent.team - 1)
-    goal = Vector3(0, 5100 * side(team), 0)
+    goal = Vector3(700 * -sign(agent.first_pos.x), 5100 * side(team), 0)
     return car.location.distance(goal) < agent.first_pos.distance(goal) + 400
 
 def eta(car, target, direction=None, distance=None):
@@ -83,72 +83,26 @@ def cap(x, low, high):
         return high
     return x
 
-def car_ball_collision_offset(angle):
-    ball_length = 94.41
-    # fc = front corner
-    fc_length = 84.083
-    fc_int_angle = math.atan(-41.9/72.9)
-    fc_new_angle = fc_int_angle + angle
-    # fl = front line
-    fl_int_angle = math.pi / 2
-    fl_new_angle = fl_int_angle + angle
-    # fp = front perpindicular
-    fp_new_angle = angle
+def car_ball_collision_offset(car, shot_vector, time_to_jump):
+    angle_from_ball = car.forward.angle(shot_vector)
+    angle_from_ball_sign = car.forward.anglesign(shot_vector)
+    max_angle = get_max_angle(cap(time_to_jump - 0.16, 0.001, 1.5), angle_from_ball, 9.11, 0)
 
-    # sl = side line
-    sl_int_angle = -math.pi
-    sl_new_angle = sl_int_angle + angle
-    # sp = side perpindicular
-    sp_int_angle = -math.pi / 2
-    sp_new_angle = sp_int_angle + angle
+    pitch_max_angle = get_max_angle(cap(time_to_jump, 0.001, 1.5), abs(math.asin(shot_vector.y)) + 0.5, 11, 0.001)
+    final_pitch = math.asin(car.forward.y) + pitch_max_angle - 0.5
+
+    forward_after_jump = shot_vector.rotate(angle_from_ball_sign - max_angle).flatten().normalize() * math.cos(final_pitch) + Vector3(0, 0, 1) * math.sin(final_pitch)
+
+    perdicted_hitbox = car.hitbox
+    perdicted_hitbox.location = Vector3(0, 0, 0)
+    perdicted_hitbox.orientation = Matrix3(
+            forward_after_jump,
+            forward_after_jump.cross(Vector3(0, 0, 1)).normalize(),
+            forward_after_jump.cross(forward_after_jump.cross(Vector3(0, 0, 1))).normalize()
+        )
     
-    # bc = back corner
-    bc_length = 65.235
-    bc_int_angle = math.atan(41.9/50) + math.pi
-    bc_new_angle = bc_int_angle + angle
-    # bl = back line
-    bl_int_angle = -math.pi / 2
-    bl_new_angle = bl_int_angle + angle
-    # bp = back perpindicular
-    bp_int_angle = -math.pi
-    bp_new_angle = bp_int_angle + angle
-
-    if angle < math.pi / 2:
-        collision_point_y = -math.sin(fp_new_angle) * ball_length
-        front_corner = Vector3(math.cos(fc_new_angle) * fc_length, math.sin(fc_new_angle) * fc_length, 0)
-        if collision_point_y > front_corner.y:
-            fl_vector = Vector3(math.cos(fl_new_angle), math.sin(fl_new_angle), 0)
-            multiplier = (collision_point_y - front_corner.y) / fl_vector.y
-            collision_point = front_corner + fl_vector * multiplier
-            return collision_point.x + math.cos(fp_new_angle) * ball_length
-        else:
-            collision_point_y = -math.sin(sp_new_angle) * ball_length
-            front_corner = Vector3(math.cos(fc_new_angle) * fc_length, math.sin(fc_new_angle) * fc_length, 0)
-            if collision_point_y < front_corner.y:
-                sl_vector = Vector3(math.cos(sl_new_angle), math.sin(sl_new_angle), 0)
-                multiplier = (collision_point_y - front_corner.y) / sl_vector.y
-                collision_point = front_corner + sl_vector * multiplier
-                return collision_point.x + math.cos(sp_new_angle) * ball_length
-            else:
-                return front_corner.x + math.cos(math.asin(front_corner.y/ball_length)) * ball_length
-    else:
-        collision_point_y = -math.sin(bp_new_angle) * ball_length
-        back_corner = Vector3(math.cos(bc_new_angle) * bc_length, math.sin(bc_new_angle) * bc_length, 0)
-        if collision_point_y < back_corner.y:
-            bl_vector = Vector3(math.cos(bl_new_angle), math.sin(bl_new_angle), 0)
-            multiplier = (collision_point_y - back_corner.y) / bl_vector.y
-            collision_point = back_corner + bl_vector * multiplier
-            return collision_point.x + math.cos(bp_new_angle) * ball_length
-        else:
-            collision_point_y = -math.sin(sp_new_angle) * ball_length
-            back_corner = Vector3(math.cos(bc_new_angle) * bc_length, math.sin(bc_new_angle) * bc_length, 0)
-            if collision_point_y > back_corner.y:
-                sl_vector = Vector3(math.cos(angle), math.sin(angle), 0)
-                multiplier =(collision_point_y - back_corner.y) / sl_vector.y
-                collision_point = back_corner + sl_vector * multiplier
-                return collision_point.x + math.cos(sp_new_angle) * ball_length
-            else:
-                return back_corner.x + math.cos(math.asin(back_corner.y/ball_length)) * ball_length
+    print(perdicted_hitbox.get_offset(shot_vector))
+    return perdicted_hitbox.get_offset(shot_vector)
 
 def find_jump_time(height, double_jump=False):
     int_jump_velocity = 291.667
@@ -261,7 +215,7 @@ def distance_to_wall(point):
         return distance_to_corner, Vector3(sign(point[0]) / math.sqrt(2), sign(point[1]) / math.sqrt(2), 0)
 
 def is_on_wall(point, try_to_reach=False):
-    if isinstance(point, Vector3):
+    if hasattr(point, "__getitem__"):
         distance = distance_to_wall(point)[0]
 
         if try_to_reach:
@@ -344,12 +298,12 @@ def steer(angle, rate):
 
 def within_turn_radius(car, location):
     location = location.flatten()
-    turn_radius = find_turn_radius(car.velocity.dot(car.forward))
+    turn_radius = find_turn_radius(math.cos(car.velocity.angle(car.forward)) * car.velocity.magnitude())
 
     left_turn_center = (car.location + car.left.flatten().normalize() * turn_radius).flatten()
     right_turn_center = (car.location - car.left.flatten().normalize() * turn_radius).flatten()
 
-    return (location.distance(left_turn_center) < turn_radius or location.distance(right_turn_center) < turn_radius) and not is_on_wall(car)
+    return (location.distance(left_turn_center) < turn_radius or location.distance(right_turn_center) < turn_radius)
 
 def find_turn_radius(speed):
     if (speed <= 500):

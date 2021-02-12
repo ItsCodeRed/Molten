@@ -133,48 +133,49 @@ class Molten(MoltenAgent):
 
         closest_foe = agent.foes[0]
         for foe in agent.foes:
-            if (eta(foe, agent.first_pos) < eta(closest_foe, agent.first_pos) and is_back(agent, foe) == is_back(agent, closest_foe)) or (is_back(agent, foe) and not is_back(agent, closest_foe)):
+            if (eta(foe, agent.first_pos) < eta(closest_foe, agent.first_pos) and is_back(agent, foe) == is_back(agent, closest_foe)) or (is_back(agent, foe) and not is_back(agent, closest_foe)) and not foe.demolished:
                 closest_foe = foe
 
-        second_pos = (my_goal_location + agent.first_pos * 3).flatten() / 4
-        second_pos.x = cap(second_pos.x / 2 - sign(second_pos.x) * cap((5200 + side(agent.team) * agent.first_pos.y) / 4, 600, 3600), -3500, 3500)
-        second_pos.y = cap(second_pos.y, -4000, 4000)
-
         third_pos = my_goal_location.flatten()
+        third_pos.x = third_pos.x - 700 * sign(agent.first_pos.x)
+        third_pos.y = third_pos.y - 600 * sign(third_pos.y)
 
-        print(agent.rotation_index)
+        second_pos = (my_goal_location + agent.first_pos * 3).flatten() / 4
+        second_pos.x = cap(second_pos.x / 2, -3500, 3500)
+        second_pos.y = cap(second_pos.y, -4000, 4000)
 
         first_mate = None
         friends_back = 0
         for friend in agent.friends:
-            if first_mate == None or (eta(friend, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)):
+            if first_mate == None or ((eta(friend, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)) and not friend.demolished):
                 first_mate = friend
             if is_back(agent, friend):
                 friends_back += 1
         
         second_mate = None
         for friend in agent.friends:
-            if (second_mate == None or (eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate))) and friend.index != first_mate.index:
+            if second_mate == None or ((eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate)) and not friend.demolished):
                 second_mate = friend
 
         third_mate = None
         for friend in agent.friends:
-            if (third_mate == None or (eta(friend, third_pos) < eta(third_mate, third_pos) and is_back(agent, friend) == is_back(agent, third_mate)) or (is_back(agent, friend) and not is_back(agent, third_mate))) and friend.index != first_mate.index and friend.index != second_mate.index:
+            if third_mate == None or ((eta(friend, third_pos) < eta(third_mate, third_pos) and is_back(agent, friend) == is_back(agent, third_mate)) or (is_back(agent, friend) and not is_back(agent, third_mate)) and not friend.demolished):
                 third_mate = friend
 
         if agent.kickoff:
             agent.rotation_index = 0
             for friend in agent.friends:
-                if eta(friend, ball_location) < eta(agent.me, ball_location) or (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) < 0.05 and sign(agent.me.location.x) == side(agent.team)):
+                if (eta(friend, ball_location) < eta(agent.me, ball_location) and (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) > 0.1)) or (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) < 0.1 and sign(agent.me.location.x) == side(agent.team)):
                     agent.rotation_index += 1
 
         if agent.rotation_index == 0:
-            if agent.me.airborne and len(agent.stack) < 1:
-                agent.push(recovery())
-            elif agent.kickoff and len(agent.stack) < 1:
+            if agent.kickoff and not agent.me.airborne and len(agent.stack) < 1:
                 agent.push(kickoff(agent.me.location.x))
-            elif (((eta(agent.me, agent.first_pos) > eta(closest_foe, agent.first_pos) and sign(agent.first_pos.y) != side(agent.team) and eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and is_back(agent, agent.me)) or not is_back(agent, agent.me))) and len(agent.stack) < 1:
+            elif ((eta(agent.me, agent.first_pos) > eta(closest_foe, agent.first_pos) and sign(agent.first_pos.y) != side(agent.team) and is_back(agent, agent.me) and \
+                eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and not first_mate.airborne) or (eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and agent.me.boost < 40 and not first_mate.airborne) or not is_back(agent, agent.me)) and len(agent.stack) < 1 and not agent.me.airborne :
                 agent.rotation_index = 2
+            elif eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and not first_mate.airborne and agent.me.boost > 40 and len(agent.stack) < 1 and not agent.me.airborne:
+                agent.rotation_index = 1
             elif sign(agent.first_pos.y) == side(agent.team) and is_back(agent, closest_foe):
                 save(agent)
             else:
@@ -182,10 +183,12 @@ class Molten(MoltenAgent):
         elif agent.rotation_index == 1:
             if agent.me.airborne and len(agent.stack) < 1:
                 agent.push(recovery())
-            elif eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos):
-                agent.rotation_index = 0
             elif len(agent.stack) < 1:
                 agent.push(goto(second_pos, ball_to_me, not is_back(agent, agent.me), (5200 - side(agent.team) * agent.first_pos.y) / 5200))
+            elif (eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) or (eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) + 0.5 and first_mate.airborne) or not is_back(agent, first_mate)) and not agent.kickoff:
+                agent.rotation_index = 0
+            elif ((eta(agent.me, third_pos) > eta(agent.me, second_pos) > eta(second_mate, second_pos) and not second_mate.airborne and agent.me.boost < second_mate.boost) or eta(agent.me, second_pos) < eta(agent.me, third_pos) < eta(third_mate, my_goal_location.flatten())) and not agent.kickoff:
+                agent.rotation_index = 2
             elif len(agent.stack) > 0 and not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
                 agent.pop()
             elif isinstance(agent.stack[-1], goto):
@@ -193,9 +196,9 @@ class Molten(MoltenAgent):
         else:
             if agent.me.airborne and len(agent.stack) < 1:
                 agent.push(recovery())
-            elif friends_back > 1 and len(agent.stack) < 1 and agent.me.location.distance(third_pos) < 200:
+            elif eta(third_mate, my_goal_location.flatten()) < agent.first_pos.distance(third_pos) / 2500 and agent.me.location.distance(third_pos) < 1000 and not agent.kickoff:
                 agent.rotation_index = 1
-            elif eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, agent.me):
+            elif eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, agent.me) and not agent.kickoff:
                 agent.rotation_index = 0
             elif len(agent.stack) > 0 and agent.me.location.distance(third_pos) < 200:
                 agent.pop()
@@ -217,7 +220,7 @@ class Molten(MoltenAgent):
         # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()
         agent.me.hitbox.render(agent, [255, 255, 255])
-
+        
         if len(agent.friends) == 0:
             Molten.solo_strat(agent)
         elif len(agent.friends) == 1:
@@ -227,3 +230,5 @@ class Molten(MoltenAgent):
         else:
             Molten.atba_strat(agent)
 
+    def is_hot_reload_enabled(self):
+        return False

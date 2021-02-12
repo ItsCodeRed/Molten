@@ -50,7 +50,7 @@ def test_shot(agent, targets, selected_slice, hits):
         estimated_time = eta(agent.me, ball_location, direction, distance)
         time_to_jump = find_jump_time(cap(ball_location[2] - agent.me.location[2], 1, 500), ball_location[2] > 300)
 
-        if estimated_time < time_remaining or ball_location.z > 640:
+        if estimated_time < time_remaining or ball_location.z > 640 or agent.me.airborne:
             for pair in targets:
                 if hits[pair] != None:
                     continue
@@ -66,22 +66,22 @@ def test_shot(agent, targets, selected_slice, hits):
                     car_final_vel = car_to_ball / time_remaining
                     angle_offset = car_final_vel.angle(shot_vector)
                     
-                    dodge_shot_speed = ball_velocity.magnitude() * 3 + car_final_vel.magnitude() * 0.2 + 500
+                    dodge_shot_speed = ball_velocity.magnitude() + cap(math.cos(car_final_vel.angle3D(shot_vector) * 0.7) * car_final_vel.magnitude(), 0, car_final_vel.magnitude()) + 500
                     ball_to_targets = (targets[pair][0] + targets[pair][1]) / 2 - ball_location
 
                     dodge_shot_angle = find_shot_angle(dodge_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
-                    dodge_max_angle = get_max_angle(cap(time_to_jump, 0.001, 1.5), abs(dodge_shot_angle) + 0.3, 11, 0.001)
+                    dodge_max_angle = get_max_angle(cap(time_to_jump, 0.001, 1.5), abs(dodge_shot_angle) + 0.5, 11, 0.001)
                     dodge_shot_angle = cap(dodge_shot_angle, -dodge_max_angle, dodge_max_angle)
 
                     dodge_shot_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
-                    dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity - car_final_vel * 0.2).normalize()
+                    dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity).normalize()
                     
-                    norm_shot_speed = ball_velocity.magnitude() * 1.5 + car_final_vel.magnitude() * 0.2 + 1
+                    norm_shot_speed = ball_velocity.magnitude() + cap(math.cos(car_final_vel.angle3D(shot_vector) * 0.9) * car_final_vel.magnitude(), 0, car_final_vel.magnitude()) + 1
 
                     norm_shot_angle = find_shot_angle(norm_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
 
                     norm_shot_vector = shot_vector.flatten().normalize() * math.cos(norm_shot_angle) + Vector3(0,0,1) * math.sin(norm_shot_angle)
-                    norm_shot_vector = (norm_shot_vector * norm_shot_speed - ball_velocity - car_final_vel * 0.2).normalize()
+                    norm_shot_vector = (norm_shot_vector * norm_shot_speed - ball_velocity).normalize()
 
                     flattened = ball_location.z - norm_shot_vector.z * 170 < 70
                 
@@ -90,13 +90,13 @@ def test_shot(agent, targets, selected_slice, hits):
                         #The slope represents how close the car is to the chosen vector, higher = better
                         #A slope of 1.0 would mean the car is 45 degrees off
                         slope = find_slope(shot_vector, car_to_ball)
-                        if is_on_wall(ball_location, True) and abs(ball_location[0]) > 1000:
+                        if is_on_wall(ball_location, True) and abs(ball_location[0]) > 1000 and not agent.me.airborne:
                             hits[pair] = wall_hit(ball_location, intercept_time, dodge_shot_vector, 1)
-                        elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 1800:
+                        elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 1800 and not agent.me.airborne:
                             hits[pair] = pop_up(ball_location, intercept_time, norm_shot_vector, 1)
-                        elif ball_location[2] - dodge_shot_vector[2] * 120 < 260:
+                        elif ball_location[2] - dodge_shot_vector[2] * 120 < 260 and not agent.me.airborne:
                             hits[pair] = shoot(ball_location, intercept_time, dodge_shot_vector, 1)
-                        elif 360 < ball_location[2] -norm_shot_vector[2] * 150 < 520:
+                        elif 360 < ball_location[2] -norm_shot_vector[2] * 150 < 520 and not agent.me.airborne:
                             hits[pair] = double_jump(ball_location, intercept_time, norm_shot_vector, 1)
                         elif ball_location[2] -norm_shot_vector[2] * 150 > 520:
                             aerial_attempt = aerial(ball_location, intercept_time, norm_shot_vector, 1)
@@ -173,11 +173,19 @@ def attack(agent):
     #     agent.push(short_shot(agent.foe_goal.location))
     if len(agent.stack) < 1:
         ball_to_me = agent.ball.location - agent.me.location
-        targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post)}
-        shot = find_shots(agent, targets)["goal"]
+        upfield_left = Vector3(-side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
+        midleft = Vector3(-side(agent.team) * 500, agent.ball.location.y, 0)
+        midright = Vector3(side(agent.team) * 500, agent.ball.location.y, 0)
+        upfield_right = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 1000)
+        targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
+        shots = find_shots(agent, targets)
 
-        if shot != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shot, aerial))):
-            agent.push(shot)
+        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))):
+            agent.push(shots["goal"])
+        elif shots["left"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["left"], aerial))) and sign(shots["left"].ball_location.x) == side(agent.team):
+            agent.push(shots["left"])
+        elif shots["right"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["right"], aerial))) and sign(shots["right"].ball_location.x) == -side(agent.team):
+            agent.push(shots["right"])
         elif agent.me.airborne:
             agent.push(recovery())
         else:
@@ -201,13 +209,17 @@ def save(agent):
 
         ball_to_me = agent.ball.location - agent.me.location
         upfield_left = Vector3(-side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 0)
+        midleft = Vector3(-side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
+        midright = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
         upfield_right = Vector3(side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 1000)
-        targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "upfield":(upfield_left, upfield_right)}
+        targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
         shots = find_shots(agent, targets)
-        if shots["upfield"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["upfield"], aerial))):
-            agent.push(shots["upfield"])
-        elif shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))):
+        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))) and abs(agent.ball.location.y) < 2000:
             agent.push(shots["goal"])
+        elif shots["left"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["left"], aerial))) and sign(shots["left"].ball_location.x) == -side(agent.team):
+            agent.push(shots["left"])
+        elif shots["right"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["right"], aerial))) and sign(shots["right"].ball_location.x) == side(agent.team):
+            agent.push(shots["right"])
         elif agent.me.airborne:
             agent.push(recovery())
         else:

@@ -184,6 +184,24 @@ class hitbox:
         )
 
         return closest_point.dot(self.orientation) + self.location + self.offset.dot(self.orientation)
+    def get_offset(self, vector):
+        offset = 500
+        local_point = self.orientation.dot(vector * offset) + self.offset
+
+        if local_point[0] < -self.half_scale[0] or local_point[0] > self.half_scale[0]:
+            if self.half_scale[0] / (0.001 + abs(vector[0])) + 92.75 < offset:
+                offset = self.half_scale[0] / (0.001 + abs(vector[0])) + 92.75
+                local_point = self.orientation.dot(vector * offset) + self.offset
+        if local_point[1] < -self.half_scale[1] or local_point[1] > self.half_scale[1]:
+            if self.half_scale[1] / (0.001 + abs(vector[1])) + 92.75 < offset:
+                offset = self.half_scale[1] / (0.001 + abs(vector[1])) + 92.75
+                local_point = self.orientation.dot(vector * offset) + self.offset
+        if local_point[2] < -self.half_scale[2] or local_point[2] > self.half_scale[2]:
+            if self.half_scale[2] / (0.001 + abs(vector[2])) + 92.75 < offset:
+                offset = self.half_scale[2] / (0.001 + abs(vector[2])) + 92.75
+                local_point = self.orientation.dot(vector * offset) + self.offset
+
+        return self.get_nearest_point(local_point.dot(self.orientation) + self.offset.dot(self.orientation)).magnitude() + 92.75
     def intersect_ball(self, ball_location):
         closest_point = self.get_nearest_point(ball_location)
         return (closest_point - ball_location).magnitude() < 94.41
