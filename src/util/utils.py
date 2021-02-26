@@ -1,5 +1,6 @@
 import math
 from util.objects import Vector3, Matrix3
+from tmcp import TMCPHandler, TMCPMessage, ActionType
 
 def find_acceleration(target, car, time, gravity = 650):
     #Finds the acceleration required for a car to reach a target in a specific amount of time
@@ -13,21 +14,31 @@ def perdict_car_location(car, time, gravity = 650):
     #Finds the cars location after a certain amount of time
     return car.location + car.velocity * time + 0.5 * Vector3(0, 0, -gravity) * time ** 2
 
+def is_ahead(agent, car1, car2, location=None):
+    if location:
+        return (eta(car1, location) < eta(car2, location) and is_back(agent, car1) == is_back(agent, car2)) or (is_back(agent, car1) and not is_back(agent, car2)) and not car1.demolished
+    return (challenge_time(agent, car1) < challenge_time(agent, car2) and is_back(agent, car1) == is_back(agent, car2)) or (is_back(agent, car1) and not is_back(agent, car2)) and not car1.demolished
+
 def is_back(agent, car):
     team = agent.team if car in agent.friends or car == agent.me else abs(agent.team - 1)
-    goal = Vector3(700 * -sign(agent.first_pos.x), 5100 * side(team), 0)
-    return car.location.distance(goal) < agent.first_pos.distance(goal) + 400
+    goal = Vector3(0, 5400 * side(team), 0)
+    return goal.distance(car.location) < goal.distance(agent.first_pos) + 300
+    
+def challenge_time(agent, car):
+    if car == agent.me or car.state == ActionType.BALL and car.eta > 0:
+        return car.eta
+    return eta(car, agent.first_pos)
 
-def eta(car, target, direction=None, distance=None):
+def eta(car, target=None, direction=None, distance=None):
     if direction != None and distance != None:
-        forward_angle = direction.angle(car.forward) * cap(distance - 300, 0, 300) / 300
+        forward_angle = direction.angle(car.forward) * cap(distance - 500, 0, 500) / 500
         car_to_target = target - car.location
-        int_vel = car.velocity.dot(car_to_target)
+        int_vel = cap(car.velocity.magnitude(), 1410, 2300)
         return distance / cap(int_vel + 1000 * car.boost / 30, 1410, 2300) + (forward_angle * 0.318)
     else:
         car_to_target = target - car.location
-        forward_angle = car_to_target.angle(car.forward) * cap(car_to_target.magnitude() - 300, 0, 300) / 300
-        int_vel = car.velocity.dot(car_to_target.normalize())
+        forward_angle = car_to_target.angle(car.forward) * cap(car_to_target.magnitude() - 500, 0, 500) / 500
+        int_vel = cap(car.velocity.magnitude(), 1410, 2300)
         return car_to_target.magnitude() / cap(int_vel + 1000 * car.boost / 30, 1410, 2300) + (forward_angle * 0.318)
 
     # car_to_target = target - car.location
@@ -101,7 +112,6 @@ def car_ball_collision_offset(car, shot_vector, time_to_jump):
             forward_after_jump.cross(forward_after_jump.cross(Vector3(0, 0, 1))).normalize()
         )
     
-    print(perdicted_hitbox.get_offset(shot_vector))
     return perdicted_hitbox.get_offset(shot_vector)
 
 def find_jump_time(height, double_jump=False):
@@ -133,7 +143,7 @@ def default_orient(agent, local_target, direction = 1.0):
     #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     agent.controller.steer = steer(target_angles[1], 0) * direction
     agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
-    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/6)
+    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/8)
     agent.controller.roll = steer(target_angles[2], agent.me.angular_velocity[0]/3)
     #Returns the angles, which can be useful for other purposes
     return target_angles
@@ -149,7 +159,7 @@ def roll_orient(agent, local_target, direction = 1.0):
         math.atan2(local_target[2],abs(local_target[1])) * -sign(local_target[1])] #angle required to roll towards target
     #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
-    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/6)
+    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/8)
     agent.controller.roll = steer(target_angles[2], agent.me.angular_velocity[0]/3)
     #Returns the angles, which can be useful for other purposes
     return target_angles
@@ -165,7 +175,7 @@ def freestyle_orient(agent, local_target, direction = 1.0):
     #Once we have the angles we need to rotate, we feed them into PD loops to determing the controller inputs
     agent.controller.steer = steer(target_angles[1], 0) * direction
     agent.controller.pitch = steer(target_angles[0], agent.me.angular_velocity[1]/6)
-    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/6)
+    agent.controller.yaw = steer(target_angles[1], -agent.me.angular_velocity[2]/8)
     agent.controller.roll = steer(target_angles[2], agent.me.angular_velocity[0]/3)
     #Returns the angles, which can be useful for other purposes
     return target_angles

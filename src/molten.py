@@ -2,6 +2,7 @@ from util.objects import *
 from util.utils import *
 from util.mechanics import *
 from util.tools import *
+from tmcp import TMCPHandler, TMCPMessage, ActionType
 
 class Molten(MoltenAgent):
 
@@ -9,6 +10,15 @@ class Molten(MoltenAgent):
         ball_location = agent.ball.location
         ball_to_me = ball_location - agent.me.location
         my_goal_location = agent.friend_goal.location
+        
+        if agent.time > agent.update_time or agent.latest_touched_time != agent.ball.latest_touched_time:
+            cars = agent.friends.copy()
+            cars.extend(agent.foes)
+            cars.append(agent.me)
+            focus = find_next_hit(agent, cars)
+            agent.first_pos = focus if focus != None else ball_location
+            agent.latest_touched_time = agent.ball.latest_touched_time
+            agent.update_time = agent.time + 0.1
 
         if len(agent.foes) > 0:
             closest_foe = agent.foes[0]
@@ -16,12 +26,12 @@ class Molten(MoltenAgent):
                 if foe.location.distance(ball_location) < closest_foe.location.distance(ball_location):
                     closest_foe = foe
 
-            my_eta = eta(agent.me, ball_location, (ball_location - agent.me.location).normalize(), agent.me.location.distance(ball_location))
-            foe_eta = eta(closest_foe, ball_location, (ball_location - closest_foe.location).normalize(), closest_foe.location.distance(ball_location))
+            my_eta = eta(agent.me, agent.first_pos, (agent.first_pos - agent.me.location).normalize(), agent.me.location.distance(ball_location))
+            foe_eta = eta(closest_foe, agent.first_pos, (agent.first_pos - closest_foe.location).normalize(), closest_foe.location.distance(ball_location))
 
             enemy_approaching = closest_foe.velocity.dot(ball_location - closest_foe.location) > 0
 
-            shot_incoming = (my_goal_location - (ball_location + closest_foe.velocity + agent.ball.velocity)).magnitude() < 4000
+            shot_incoming = (agent.first_pos + closest_foe.velocity + agent.ball.velocity).y * side(agent.team) > 2000
 
             shadow_pos = (my_goal_location + ball_location + closest_foe.velocity).flatten() / 2
             shadow_pos.x = cap(shadow_pos.x - sign(shadow_pos.x) * 1000, -3500, 3500)
@@ -37,9 +47,9 @@ class Molten(MoltenAgent):
                 elif isinstance(agent.stack[-1], goto):
                     agent.stack[-1].update(shadow_pos, ball_to_me, 2300)
             elif shot_incoming:
-                save(agent)
+                save(agent, foe_eta - my_eta)
             else:
-                attack(agent)
+                attack(agent, foe_eta - my_eta)
         else:
             if agent.kickoff and len(agent.stack) < 1:
                 agent.push(kickoff(agent.me.location.x))
@@ -126,41 +136,55 @@ class Molten(MoltenAgent):
             cars = agent.friends.copy()
             cars.extend(agent.foes)
             cars.append(agent.me)
-            focus = find_next_hit(agent, cars)
-            agent.first_pos = focus if focus != None else ball_location
+            moment = find_next_hit(agent, cars)
+            agent.first_pos = moment.location if moment != None else ball_location
+            agent.first_moment = moment if moment != None else ball_moment(ball_location, agent.ball.velocity, agent.time + eta(agent.me, ball_location))
+
+            my_moment = find_next_hit(agent, [agent.me])
+            agent.me.intercept = my_moment.time if moment != None else agent.time + eta(agent.me, agent.first_pos)
+
             agent.latest_touched_time = agent.ball.latest_touched_time
             agent.update_time = agent.time + 0.1
 
         closest_foe = agent.foes[0]
         for foe in agent.foes:
-            if (eta(foe, agent.first_pos) < eta(closest_foe, agent.first_pos) and is_back(agent, foe) == is_back(agent, closest_foe)) or (is_back(agent, foe) and not is_back(agent, closest_foe)) and not foe.demolished:
+            if (challenge_time(agent, foe) < challenge_time(agent, closest_foe) and is_back(agent, foe) == is_back(agent, closest_foe)) or (is_back(agent, foe) and not is_back(agent, closest_foe)) and not foe.demolished:
                 closest_foe = foe
 
-        third_pos = my_goal_location.flatten()
-        third_pos.x = third_pos.x - 700 * sign(agent.first_pos.x)
-        third_pos.y = third_pos.y - 600 * sign(third_pos.y)
+        third_pos = my_goal_location.flatten() + Vector3(0, 200 * side(agent.team) - cap(-agent.first_pos.y * side(agent.team), 0, 5200) / 5, 0)
 
         second_pos = (my_goal_location + agent.first_pos * 3).flatten() / 4
         second_pos.x = cap(second_pos.x / 2, -3500, 3500)
         second_pos.y = cap(second_pos.y, -4000, 4000)
 
+        time_to_spare = challenge_time(agent, closest_foe) + (third_pos - agent.first_pos).magnitude() / cap(closest_foe.velocity.magnitude() + 500, agent.first_moment.velocity.magnitude(), 99999) - eta(agent.me, third_pos)
+
         first_mate = None
+        first_mate_eta = 99999
+        first_mate_intent = False
+        first_mate_exsits = False
         friends_back = 0
         for friend in agent.friends:
-            if first_mate == None or ((eta(friend, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)) and not friend.demolished):
+            if first_mate == None or ((challenge_time(agent, friend) < challenge_time(agent, first_mate) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)) and not friend.demolished):
                 first_mate = friend
+                first_mate.intercept = agent.time + challenge_time(agent, friend) if friend.state != ActionType.BALL else first_mate.intercept
+                first_mate_intent = friend.state != None
             if is_back(agent, friend):
                 friends_back += 1
         
         second_mate = None
+        second_mate_intent = False
         for friend in agent.friends:
-            if second_mate == None or ((eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate)) and not friend.demolished):
+            if second_mate == None or ((eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate)) and not friend.demolished and (friend.state == None or friend.state == ActionType.WAIT)):
                 second_mate = friend
+                second_mate_intent = friend.state == ActionType.WAIT
 
         third_mate = None
+        third_mate_intent = False
         for friend in agent.friends:
-            if third_mate == None or ((eta(friend, third_pos) < eta(third_mate, third_pos) and is_back(agent, friend) == is_back(agent, third_mate)) or (is_back(agent, friend) and not is_back(agent, third_mate)) and not friend.demolished):
+            if third_mate == None or ((eta(friend, third_pos) < eta(third_mate, third_pos) and is_back(agent, friend) == is_back(agent, third_mate)) or (is_back(agent, friend) and not is_back(agent, third_mate)) and not friend.demolished and (friend.state == None or friend.state == ActionType.DEFEND)):
                 third_mate = friend
+                third_mate_intent = friend.state != None
 
         if agent.kickoff:
             agent.rotation_index = 0
@@ -168,46 +192,53 @@ class Molten(MoltenAgent):
                 if (eta(friend, ball_location) < eta(agent.me, ball_location) and (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) > 0.1)) or (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) < 0.1 and sign(agent.me.location.x) == side(agent.team)):
                     agent.rotation_index += 1
 
+        in_net_and_should_save = agent.me.location.distance(third_pos) < 1500 and agent.ball.velocity.angle(third_pos - ball_location) < 0.8 and (third_pos - ball_location).magnitude() / agent.ball.velocity.magnitude() < 2
+        print(str(agent.index) + ":" + str(agent.rotation_index == 0))
+        print(str(agent.index) + ": " + str(challenge_time(agent, agent.me)) + str(agent.friends[0].index) + "=" + str(challenge_time(agent, agent.friends[0])) + str(agent.friends[1].index) + "=" + str(challenge_time(agent, agent.friends[1])))
+
         if agent.rotation_index == 0:
             if agent.kickoff and not agent.me.airborne and len(agent.stack) < 1:
                 agent.push(kickoff(agent.me.location.x))
-            elif ((eta(agent.me, agent.first_pos) > eta(closest_foe, agent.first_pos) and sign(agent.first_pos.y) != side(agent.team) and is_back(agent, agent.me) and \
-                eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and not first_mate.airborne) or (eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and agent.me.boost < 40 and not first_mate.airborne) or not is_back(agent, agent.me)) and len(agent.stack) < 1 and not agent.me.airborne :
+            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost < 40 and (first_mate_intent or (not is_ahead(agent, agent.me, closest_foe) and not in_net_and_should_save)) and not agent.me.airborne:
                 agent.rotation_index = 2
-            elif eta(agent.me, agent.first_pos) > eta(first_mate, agent.first_pos) and not first_mate.airborne and agent.me.boost > 40 and len(agent.stack) < 1 and not agent.me.airborne:
+            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost >= 40 and (first_mate_intent or (not is_ahead(agent, agent.me, closest_foe) and not in_net_and_should_save)) and not agent.me.airborne:
                 agent.rotation_index = 1
             elif sign(agent.first_pos.y) == side(agent.team) and is_back(agent, closest_foe):
-                save(agent)
+                save(agent, eta(closest_foe, agent.first_pos) - agent.me.eta)
             else:
-                attack(agent)
+                attack(agent, eta(closest_foe, agent.first_pos) - agent.me.eta)
         elif agent.rotation_index == 1:
             if agent.me.airborne and len(agent.stack) < 1:
                 agent.push(recovery())
             elif len(agent.stack) < 1:
-                agent.push(goto(second_pos, ball_to_me, not is_back(agent, agent.me), (5200 - side(agent.team) * agent.first_pos.y) / 5200))
-            elif (eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) or (eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) + 0.5 and first_mate.airborne) or not is_back(agent, first_mate)) and not agent.kickoff:
+                agent.push(goto(second_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare))
+            elif is_ahead(agent, agent.me, first_mate) or (not first_mate_intent and is_ahead(agent, agent.me, closest_foe)) and not agent.kickoff:
                 agent.rotation_index = 0
-            elif ((eta(agent.me, third_pos) > eta(agent.me, second_pos) > eta(second_mate, second_pos) and not second_mate.airborne and agent.me.boost < second_mate.boost) or eta(agent.me, second_pos) < eta(agent.me, third_pos) < eta(third_mate, my_goal_location.flatten())) and not agent.kickoff:
+            elif (eta(third_mate, third_pos) > eta(agent.me, third_pos) > eta(agent.me, second_pos)) or not (eta(third_mate, my_goal_location.flatten()) < time_to_spare * (1 if third_mate_intent else 0.5)) and not agent.kickoff:
                 agent.rotation_index = 2
             elif len(agent.stack) > 0 and not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
                 agent.pop()
             elif isinstance(agent.stack[-1], goto):
-                agent.stack[-1].update(second_pos, ball_to_me, not is_back(agent, agent.me), (5200 - side(agent.team) * agent.first_pos.y) / 5200)
+                agent.stack[-1].update(second_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare)
+
+            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, True)
         else:
             if agent.me.airborne and len(agent.stack) < 1:
                 agent.push(recovery())
-            elif eta(third_mate, my_goal_location.flatten()) < agent.first_pos.distance(third_pos) / 2500 and agent.me.location.distance(third_pos) < 1000 and not agent.kickoff:
+            elif eta(third_mate, my_goal_location.flatten()) < time_to_spare * (1 if third_mate_intent else 0.5) and agent.me.location.distance(third_pos) < 1000 and third_mate.index != first_mate.index and not agent.kickoff:
                 agent.rotation_index = 1
-            elif eta(agent.me, agent.first_pos) < eta(first_mate, agent.first_pos) and is_back(agent, agent.me) and not agent.kickoff:
+            elif is_ahead(agent, agent.me, first_mate) or (not first_mate_intent and (is_ahead(agent, agent.me, closest_foe) or in_net_and_should_save)) and not agent.kickoff:
                 agent.rotation_index = 0
             elif len(agent.stack) > 0 and agent.me.location.distance(third_pos) < 200:
                 agent.pop()
             elif len(agent.stack) < 1 and agent.me.location.distance(third_pos) > 200:
-                agent.push(goto(third_pos, ball_to_me, not is_back(agent, agent.me), (5200 - side(agent.team) * agent.first_pos.y) / 5200))
+                agent.push(goto(third_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare))
             elif len(agent.stack) > 0 and not isinstance(agent.stack[-1], goto) and not isinstance(agent.stack[-1], flip) and not isinstance(agent.stack[-1], recovery):
                 agent.pop()
             elif len(agent.stack) > 0 and isinstance(agent.stack[-1], goto):
-                agent.stack[-1].update(third_pos, ball_to_me, not is_back(agent, agent.me), (5200 - side(agent.team) * agent.first_pos.y) / 5200)
+                agent.stack[-1].update(third_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare)
+
+            agent.plan = TMCPMessage.defend_action(agent.team, agent.index)
     
     def atba_strat(agent):
         if len(agent.stack) < 1:
@@ -217,6 +248,26 @@ class Molten(MoltenAgent):
                 attack(agent)
     
     def run(agent):
+        new_messages: List[TMCPMessage] = agent.tmcp_handler.recv()
+
+        for message in new_messages:
+            if message.action_type == ActionType.BALL:
+                for friend in agent.friends:
+                    if friend.index == message.index:
+                        friend.intercept = message.time
+                        friend.state = ActionType.BALL
+                        print(str(friend.index) + ": INTERCEPT=" + str(friend.intercept))
+            else:
+                for friend in agent.friends:
+                    if friend.index == message.index:
+                        friend.intercept = -1
+                        friend.state = message.action_type
+                        print(str(friend.index) + ": " + str(message.action_type))
+
+        for friend in agent.friends:
+            friend.eta = friend.intercept - agent.time
+        agent.me.eta = agent.me.intercept - agent.time
+
         # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()
         agent.me.hitbox.render(agent, [255, 255, 255])

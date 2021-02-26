@@ -2,6 +2,7 @@ import math
 import numpy as np
 import rlbot.utils.structures.game_data_struct as game_data_struct
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
+from tmcp import TMCPHandler, TMCPMessage, ActionType
 
 class MoltenAgent(BaseAgent):
     def initialize_agent(self):
@@ -25,9 +26,8 @@ class MoltenAgent(BaseAgent):
         #Game time
         self.time = 0.0
         self.tick = 0
-        self.update_time = 0
+        self.update_time = -500
         self.latest_touched_time = 0
-        self.first_pos = Vector3(0,0,0)
         #Whether or not GoslingAgent has run its get_ready() function
         self.ready = False
         #the controller that is returned to the framework after every tick
@@ -35,7 +35,12 @@ class MoltenAgent(BaseAgent):
         #a flag that tells us when kickoff is happening
         self.kickoff = False
         #the rotation position of my bot
+        self.first_pos = Vector3(0,0,0)
+        self.first_moment = None
         self.rotation_index = 0
+        self.plan = None
+        self.old_plan = None
+        self.tmcp_handler = TMCPHandler(self)
     def get_ready(self,packet):
         #Preps all of the objects that will be updated during play
         field_info = self.get_field_info()
@@ -104,6 +109,11 @@ class MoltenAgent(BaseAgent):
             #run the routine on the end of the stack
             if len(self.stack) > 0:
                 self.stack[-1].run(self)
+
+            if self.old_plan == None or (self.plan != None and self.plan.action_type != self.old_plan.action_type):
+                self.tmcp_handler.send(self.plan)
+                self.old_plan = self.plan
+            
             self.renderer.end_rendering()
             #send our updated controller back to rlbot
             return self.controller
@@ -127,7 +137,10 @@ class car_object:
         self.doublejumped = False
         self.boost = 0
         self.index = index
-        self.next_hit = ball_moment(Vector3(0,0,0),Vector3(0,0,0),0,0)
+        self.state = None
+        self.team = 0
+        self.intercept = 0
+        self.eta = 0
         if packet != None:
             self.update(packet)
     def local(self,value):
@@ -144,6 +157,7 @@ class car_object:
         self.airborne = not car.has_wheel_contact
         self.supersonic = car.is_super_sonic
         self.jumped = car.jumped
+        self.team = car.team
         self.doublejumped = car.double_jumped
         self.boost = car.boost
     def debug_next_hit(self, agent):
@@ -236,11 +250,10 @@ class hitbox:
         agent.line(center + Vector3(-hs[0],-hs[1],hs[2]).dot(orient), center + Vector3(-hs[0],-hs[1],-hs[2]).dot(orient), color)
 
 class ball_moment:
-    def __init__(self, location, velocity, time, eta):
+    def __init__(self, location, velocity, time):
         self.location = location
         self.velocity = velocity
         self.time = time
-        self.eta = eta
 
 class ball_object:
     def __init__(self):

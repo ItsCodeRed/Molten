@@ -2,26 +2,27 @@ from util.mechanics import *
 from util.utils import *
 import math
 import numpy as np
+from tmcp import TMCPHandler, TMCPMessage, ActionType
 
 #This file is for small utilities for math and movement
 
-def find_shots(agent, targets):
+def find_shots(agent, targets, extra_time):
     #find_hits looks into the future and finds all future hits that the car can reach in time
     #and that could be shot between the targets provided
     hits = {name:None for name in targets}
     ball_prediction = agent.get_ball_prediction_struct()
     for coarse_index in range(20, ball_prediction.num_slices, 20):
-        if test_shot(agent, targets, ball_prediction.slices[coarse_index], hits) == "scored":
+        if test_shot(agent, targets, ball_prediction.slices[coarse_index], hits, extra_time) == "scored":
             break
-        if test_shot(agent, targets, ball_prediction.slices[coarse_index], hits) != hits:
+        if test_shot(agent, targets, ball_prediction.slices[coarse_index], hits, extra_time) != hits:
             for index in range(max(20, coarse_index - 20), coarse_index):
                 if test_hit(agent, targets, ball_prediction.slices[index], hits) == "scored":
                     break
-                if test_shot(agent, targets, ball_prediction.slices[index], hits) != hits:
-                    hits = test_shot(agent, targets, ball_prediction.slices[index])
+                if test_shot(agent, targets, ball_prediction.slices[index], hits, extra_time) != hits:
+                    hits = test_shot(agent, targets, ball_prediction.slices[index], hits, extra_time)
     return hits
 
-def test_shot(agent, targets, selected_slice, hits):
+def test_shot(agent, targets, selected_slice, hits, extra_time):
     #Gather some data about the slice
     intercept_time = selected_slice.game_seconds
     time_remaining = intercept_time - agent.time
@@ -64,9 +65,9 @@ def test_shot(agent, targets, selected_slice, hits):
                     shot_vector = direction.clamp(left_vector, right_vector).normalize()
 
                     car_final_vel = car_to_ball / time_remaining
-                    angle_offset = car_final_vel.angle(shot_vector)
+                    angle_turned = cap(distance / (500 + 800 / (2 - cap(extra_time, 0, 1))), 0, car_final_vel.angle3D(shot_vector))
                     
-                    dodge_shot_speed = ball_velocity.magnitude() + cap(math.cos(car_final_vel.angle3D(shot_vector) * 0.7) * car_final_vel.magnitude(), 0, car_final_vel.magnitude()) + 500
+                    dodge_shot_speed = ball_velocity.magnitude() + cap(math.cos(car_final_vel.angle3D(shot_vector) - angle_turned) * car_final_vel.magnitude(), 0, car_final_vel.magnitude()) + 500
                     ball_to_targets = (targets[pair][0] + targets[pair][1]) / 2 - ball_location
 
                     dodge_shot_angle = find_shot_angle(dodge_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
@@ -76,7 +77,7 @@ def test_shot(agent, targets, selected_slice, hits):
                     dodge_shot_vector = shot_vector.flatten().normalize() * math.cos(dodge_shot_angle) + Vector3(0,0,1) * math.sin(dodge_shot_angle)
                     dodge_shot_vector = (dodge_shot_vector * dodge_shot_speed - ball_velocity).normalize()
                     
-                    norm_shot_speed = ball_velocity.magnitude() + cap(math.cos(car_final_vel.angle3D(shot_vector) * 0.9) * car_final_vel.magnitude(), 0, car_final_vel.magnitude()) + 1
+                    norm_shot_speed = ball_velocity.magnitude() * 1.5 + 1
 
                     norm_shot_angle = find_shot_angle(norm_shot_speed, ball_to_targets.flatten().magnitude(), ball_to_targets.z)
 
@@ -90,14 +91,14 @@ def test_shot(agent, targets, selected_slice, hits):
                         #The slope represents how close the car is to the chosen vector, higher = better
                         #A slope of 1.0 would mean the car is 45 degrees off
                         slope = find_slope(shot_vector, car_to_ball)
-                        if is_on_wall(ball_location, True) and abs(ball_location[0]) > 1000 and not agent.me.airborne:
-                            hits[pair] = wall_hit(ball_location, intercept_time, dodge_shot_vector, 1)
+                        if is_on_wall(ball_location, not is_on_wall(agent.me.location, False)) and abs(ball_location[0]) > 1000 and not agent.me.airborne:
+                            hits[pair] = wall_hit(ball_location, intercept_time, dodge_shot_vector, 1, extra_time)
                         elif ball_location[2] < 120 and flattened and (car_final_vel - ball_velocity).magnitude() > 1800 and not agent.me.airborne:
-                            hits[pair] = pop_up(ball_location, intercept_time, norm_shot_vector, 1)
+                            hits[pair] = pop_up(ball_location, intercept_time, norm_shot_vector, 1, extra_time)
                         elif ball_location[2] - dodge_shot_vector[2] * 120 < 260 and not agent.me.airborne:
-                            hits[pair] = shoot(ball_location, intercept_time, dodge_shot_vector, 1)
+                            hits[pair] = shoot(ball_location, intercept_time, dodge_shot_vector, 1, extra_time)
                         elif 360 < ball_location[2] -norm_shot_vector[2] * 150 < 520 and not agent.me.airborne:
-                            hits[pair] = double_jump(ball_location, intercept_time, norm_shot_vector, 1)
+                            hits[pair] = double_jump(ball_location, intercept_time, norm_shot_vector, 1, extra_time)
                         elif ball_location[2] -norm_shot_vector[2] * 150 > 520:
                             aerial_attempt = aerial(ball_location, intercept_time, norm_shot_vector, 1)
                             if aerial_attempt.is_viable(agent, agent.time):
@@ -112,10 +113,12 @@ def find_next_hit(agent, cars):
         for car in cars:
             if test_hit(agent, car, ball_prediction.slices[coarse_index]):
                 for index in range(max(20, coarse_index - 20), coarse_index):
-                    if test_hit(agent, car, ball_prediction.slices[index]) == "scored":
+                    if car.intercept != None:
                         break
+                    if test_hit(agent, car, ball_prediction.slices[index]) == "scored":
+                        return None
                     if test_hit(agent, car, ball_prediction.slices[index]):
-                        return Vector3(ball_prediction.slices[index].physics.location)
+                        return ball_moment(Vector3(ball_prediction.slices[index].physics.location), Vector3(ball_prediction.slices[index].physics.velocity), ball_prediction.slices[index].game_seconds)
     return None
 
 def test_hit(agent, car, selected_slice, return_eta=False):
@@ -163,7 +166,7 @@ def test_hit(agent, car, selected_slice, return_eta=False):
     else:
         return False
 
-def attack(agent):
+def attack(agent, extra_time):
     # ball_to_me = agent.ball.location - agent.me.location
     # targets = {"goal":(agent.foe_goal.left_post - Vector3(0, 0, 300), agent.foe_goal.right_post + Vector3(0, 0, 300))}
     # shots = find_hits(agent, targets)
@@ -173,27 +176,35 @@ def attack(agent):
     #     agent.push(short_shot(agent.foe_goal.location))
     if len(agent.stack) < 1:
         ball_to_me = agent.ball.location - agent.me.location
-        upfield_left = Vector3(-side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
-        midleft = Vector3(-side(agent.team) * 500, agent.ball.location.y, 0)
-        midright = Vector3(side(agent.team) * 500, agent.ball.location.y, 0)
-        upfield_right = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 1000)
+        upfield_left = Vector3(-side(agent.team) * 500, agent.ball.location.y - side(agent.team) * 2000, 0)
+        midleft = Vector3(-side(agent.team) * 2000, agent.ball.location.y, 0)
+        midright = Vector3(side(agent.team) * 2000, agent.ball.location.y, 0)
+        upfield_right = Vector3(side(agent.team) * 500, agent.ball.location.y - side(agent.team) * 2000, 1000)
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
-        shots = find_shots(agent, targets)
+        shots = find_shots(agent, targets, extra_time)
 
-        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))):
+        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))) and (shots["left"] == None or shots["goal"].intercept_time - 0.2 < shots["left"].intercept_time):
             agent.push(shots["goal"])
+            agent.me.intercept = shots["goal"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif shots["left"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["left"], aerial))) and sign(shots["left"].ball_location.x) == side(agent.team):
             agent.push(shots["left"])
+            agent.me.intercept = shots["left"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif shots["right"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["right"], aerial))) and sign(shots["right"].ball_location.x) == -side(agent.team):
             agent.push(shots["right"])
+            agent.me.intercept = shots["right"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif agent.me.airborne:
             agent.push(recovery())
+            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, False)
         else:
             agent.push(short_shot(agent.foe_goal.location))
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
     elif isinstance(agent.stack[-1], goto):
         agent.pop()
 
-def save(agent):
+def save(agent, extra_time):
     if len(agent.stack) < 1:
     # ball_to_me = agent.ball.location - agent.me.location
     # upfield_left = Vector3(-side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 0)
@@ -213,16 +224,24 @@ def save(agent):
         midright = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
         upfield_right = Vector3(side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 1000)
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
-        shots = find_shots(agent, targets)
-        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))) and abs(agent.ball.location.y) < 2000:
+        shots = find_shots(agent, targets, extra_time)
+        if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))) and abs(agent.ball.location.y) < 2000 and (shots["left"] == None or shots["goal"].intercept_time - 0.2 < shots["left"].intercept_time):
             agent.push(shots["goal"])
+            agent.me.intercept = shots["goal"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif shots["left"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["left"], aerial))) and sign(shots["left"].ball_location.x) == -side(agent.team):
             agent.push(shots["left"])
+            agent.me.intercept = shots["left"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif shots["right"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["right"], aerial))) and sign(shots["right"].ball_location.x) == side(agent.team):
             agent.push(shots["right"])
+            agent.me.intercept = shots["right"].intercept_time
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif agent.me.airborne:
             agent.push(recovery())
+            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, False)
         else:
             agent.push(short_shot(agent.foe_goal.location))
+            agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
     elif isinstance(agent.stack[-1], goto):
         agent.pop()
