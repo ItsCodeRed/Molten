@@ -113,8 +113,6 @@ def find_next_hit(agent, cars):
         for car in cars:
             if test_hit(agent, car, ball_prediction.slices[coarse_index]):
                 for index in range(max(20, coarse_index - 20), coarse_index):
-                    if car.intercept != None:
-                        break
                     if test_hit(agent, car, ball_prediction.slices[index]) == "scored":
                         return None
                     if test_hit(agent, car, ball_prediction.slices[index]):
@@ -176,10 +174,10 @@ def attack(agent, extra_time):
     #     agent.push(short_shot(agent.foe_goal.location))
     if len(agent.stack) < 1:
         ball_to_me = agent.ball.location - agent.me.location
-        upfield_left = Vector3(-side(agent.team) * 500, agent.ball.location.y - side(agent.team) * 2000, 0)
-        midleft = Vector3(-side(agent.team) * 2000, agent.ball.location.y, 0)
-        midright = Vector3(side(agent.team) * 2000, agent.ball.location.y, 0)
-        upfield_right = Vector3(side(agent.team) * 500, agent.ball.location.y - side(agent.team) * 2000, 1000)
+        upfield_left = Vector3(-side(agent.team) * 2500, agent.ball.location.y - side(agent.team) * 2000, 500)
+        midleft = Vector3(0, cap(agent.ball.location.y - side(agent.team) * 2000, 4000, -4000), 500)
+        midright = Vector3(0, cap(agent.ball.location.y - side(agent.team) * 2000, 4000, -4000), 500)
+        upfield_right = Vector3(side(agent.team) * 2500, agent.ball.location.y - side(agent.team) * 2000, 500)
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
         shots = find_shots(agent, targets, extra_time)
 
@@ -197,7 +195,7 @@ def attack(agent, extra_time):
             agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif agent.me.airborne:
             agent.push(recovery())
-            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, False)
+            agent.plan = TMCPMessage.ready_action(agent.team, agent.index, -1)
         else:
             agent.push(short_shot(agent.foe_goal.location))
             agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
@@ -219,10 +217,10 @@ def save(agent, extra_time):
     #     agent.push(short_shot(agent.foe_goal.location))
 
         ball_to_me = agent.ball.location - agent.me.location
-        upfield_left = Vector3(-side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 0)
-        midleft = Vector3(-side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
-        midright = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 2000, 0)
-        upfield_right = Vector3(side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 2000, 1000)
+        upfield_left = Vector3(-side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 3000, 0)
+        midleft = Vector3(-side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 3000, 0)
+        midright = Vector3(side(agent.team) * 1500, agent.ball.location.y - side(agent.team) * 3000, 0)
+        upfield_right = Vector3(side(agent.team) * 4096, agent.ball.location.y - side(agent.team) * 3000, 1000)
         targets = {"goal":(agent.foe_goal.left_post, agent.foe_goal.right_post), "left":(upfield_left, midleft), "right":(midright, upfield_right)}
         shots = find_shots(agent, targets, extra_time)
         if shots["goal"] != None and (not agent.me.airborne or (agent.me.airborne and isinstance(shots["goal"], aerial))) and abs(agent.ball.location.y) < 2000 and (shots["left"] == None or shots["goal"].intercept_time - 0.2 < shots["left"].intercept_time):
@@ -239,7 +237,7 @@ def save(agent, extra_time):
             agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)
         elif agent.me.airborne:
             agent.push(recovery())
-            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, False)
+            agent.plan = TMCPMessage.ready_action(agent.team, agent.index, -1)
         else:
             agent.push(short_shot(agent.foe_goal.location))
             agent.plan = TMCPMessage.ball_action(agent.team, agent.index, agent.me.intercept)

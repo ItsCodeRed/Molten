@@ -140,11 +140,25 @@ class Molten(MoltenAgent):
             agent.first_pos = moment.location if moment != None else ball_location
             agent.first_moment = moment if moment != None else ball_moment(ball_location, agent.ball.velocity, agent.time + eta(agent.me, ball_location))
 
+            for car in agent.friends:
+                if not car.ready or car.state == None: 
+                    moment = find_next_hit(agent, [car])
+                    car.intercept = moment.time if moment != None else agent.time + 6
+            for car in agent.foes:
+                moment = find_next_hit(agent, [car])
+                car.intercept = moment.time if moment != None else agent.time + 6
+
             my_moment = find_next_hit(agent, [agent.me])
-            agent.me.intercept = my_moment.time if moment != None else agent.time + eta(agent.me, agent.first_pos)
+            agent.me.intercept = my_moment.time if my_moment != None else agent.time + 6
 
             agent.latest_touched_time = agent.ball.latest_touched_time
-            agent.update_time = agent.time + 0.1
+            agent.update_time = agent.time + 0.15
+
+        for car in agent.friends:
+            car.eta = car.intercept - agent.time
+        for car in agent.foes:
+            car.eta = car.intercept - agent.time
+        agent.me.eta = agent.me.intercept - agent.time
 
         closest_foe = agent.foes[0]
         for foe in agent.foes:
@@ -167,7 +181,6 @@ class Molten(MoltenAgent):
         for friend in agent.friends:
             if first_mate == None or ((challenge_time(agent, friend) < challenge_time(agent, first_mate) and is_back(agent, friend) == is_back(agent, first_mate)) or (is_back(agent, friend) and not is_back(agent, first_mate)) and not friend.demolished):
                 first_mate = friend
-                first_mate.intercept = agent.time + challenge_time(agent, friend) if friend.state != ActionType.BALL else first_mate.intercept
                 first_mate_intent = friend.state != None
             if is_back(agent, friend):
                 friends_back += 1
@@ -175,9 +188,9 @@ class Molten(MoltenAgent):
         second_mate = None
         second_mate_intent = False
         for friend in agent.friends:
-            if second_mate == None or ((eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate)) and not friend.demolished and (friend.state == None or friend.state == ActionType.WAIT)):
+            if second_mate == None or ((eta(friend, second_pos) < eta(second_mate, second_pos) and is_back(agent, friend) == is_back(agent, second_mate)) or (is_back(agent, friend) and not is_back(agent, second_mate)) and not friend.demolished and (friend.state == None or friend.state == ActionType.READY)):
                 second_mate = friend
-                second_mate_intent = friend.state == ActionType.WAIT
+                second_mate_intent = friend.state == ActionType.READY
 
         third_mate = None
         third_mate_intent = False
@@ -192,16 +205,15 @@ class Molten(MoltenAgent):
                 if (eta(friend, ball_location) < eta(agent.me, ball_location) and (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) > 0.1)) or (abs(eta(friend, ball_location) - eta(agent.me, ball_location)) < 0.1 and sign(agent.me.location.x) == side(agent.team)):
                     agent.rotation_index += 1
 
-        in_net_and_should_save = agent.me.location.distance(third_pos) < 1500 and agent.ball.velocity.angle(third_pos - ball_location) < 0.8 and (third_pos - ball_location).magnitude() / agent.ball.velocity.magnitude() < 2
-        print(str(agent.index) + ":" + str(agent.rotation_index == 0))
-        print(str(agent.index) + ": " + str(challenge_time(agent, agent.me)) + str(agent.friends[0].index) + "=" + str(challenge_time(agent, agent.friends[0])) + str(agent.friends[1].index) + "=" + str(challenge_time(agent, agent.friends[1])))
+        a = (5300 - abs(agent.ball.location.y)) / (abs(agent.ball.velocity.y) + 0.001)
+        in_net_and_should_save = agent.me.location.distance(third_pos) < 1500 and sign(agent.ball.velocity.y) == side(agent.team) and abs(agent.ball.location.x + agent.ball.velocity.x * a) < 850 and (third_pos - ball_location).magnitude() / agent.ball.velocity.magnitude() < 5
 
         if agent.rotation_index == 0:
             if agent.kickoff and not agent.me.airborne and len(agent.stack) < 1:
                 agent.push(kickoff(agent.me.location.x))
-            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost < 40 and (first_mate_intent or (not is_ahead(agent, agent.me, closest_foe) and not in_net_and_should_save)) and not agent.me.airborne:
+            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost < 40 and (first_mate_intent or not is_ahead(agent, agent.me, closest_foe)) and not in_net_and_should_save and not agent.me.airborne:
                 agent.rotation_index = 2
-            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost >= 40 and (first_mate_intent or (not is_ahead(agent, agent.me, closest_foe) and not in_net_and_should_save)) and not agent.me.airborne:
+            elif not is_ahead(agent, agent.me, first_mate) and agent.me.boost >= 40 and (first_mate_intent or not is_ahead(agent, agent.me, closest_foe)) and not in_net_and_should_save and not agent.me.airborne:
                 agent.rotation_index = 1
             elif sign(agent.first_pos.y) == side(agent.team) and is_back(agent, closest_foe):
                 save(agent, eta(closest_foe, agent.first_pos) - agent.me.eta)
@@ -221,13 +233,13 @@ class Molten(MoltenAgent):
             elif isinstance(agent.stack[-1], goto):
                 agent.stack[-1].update(second_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare)
 
-            agent.plan = TMCPMessage.wait_action(agent.team, agent.index, True)
+            agent.plan = TMCPMessage.ready_action(agent.team, agent.index, agent.me.intercept)
         else:
             if agent.me.airborne and len(agent.stack) < 1:
                 agent.push(recovery())
             elif eta(third_mate, my_goal_location.flatten()) < time_to_spare * (1 if third_mate_intent else 0.5) and agent.me.location.distance(third_pos) < 1000 and third_mate.index != first_mate.index and not agent.kickoff:
                 agent.rotation_index = 1
-            elif is_ahead(agent, agent.me, first_mate) or (not first_mate_intent and (is_ahead(agent, agent.me, closest_foe) or in_net_and_should_save)) and not agent.kickoff:
+            elif (is_ahead(agent, agent.me, first_mate) or (not first_mate_intent and is_ahead(agent, agent.me, closest_foe)) or in_net_and_should_save) and not agent.kickoff:
                 agent.rotation_index = 0
             elif len(agent.stack) > 0 and agent.me.location.distance(third_pos) < 200:
                 agent.pop()
@@ -238,7 +250,10 @@ class Molten(MoltenAgent):
             elif len(agent.stack) > 0 and isinstance(agent.stack[-1], goto):
                 agent.stack[-1].update(third_pos, ball_to_me, not is_back(agent, agent.me), time_to_spare)
 
-            agent.plan = TMCPMessage.defend_action(agent.team, agent.index)
+            if eta(agent.me, my_goal_location.flatten()) < time_to_spare * 0.5:
+                agent.plan = TMCPMessage.defend_action(agent.team, agent.index)
+            else:
+                agent.plan = TMCPMessage.ready_action(agent.team, agent.index, agent.me.intercept)
     
     def atba_strat(agent):
         if len(agent.stack) < 1:
@@ -256,17 +271,21 @@ class Molten(MoltenAgent):
                     if friend.index == message.index:
                         friend.intercept = message.time
                         friend.state = ActionType.BALL
+                        friend.ready = True
                         print(str(friend.index) + ": INTERCEPT=" + str(friend.intercept))
+            elif message.action_type == ActionType.READY:
+                for friend in agent.friends:
+                    if friend.index == message.index:
+                        friend.intercept = message.time if message.time > 0 else friend.intercept
+                        friend.ready = message.time > 0
+                        friend.state = ActionType.READY
+                        print(str(friend.index) + ": READY=" + str(friend.intercept))
             else:
                 for friend in agent.friends:
                     if friend.index == message.index:
-                        friend.intercept = -1
                         friend.state = message.action_type
+                        friend.ready = False
                         print(str(friend.index) + ": " + str(message.action_type))
-
-        for friend in agent.friends:
-            friend.eta = friend.intercept - agent.time
-        agent.me.eta = agent.me.intercept - agent.time
 
         # find_fastest_hits(agent, np.append(np.append(agent.friends, agent.foes), agent.me))
         agent.debug_stack()

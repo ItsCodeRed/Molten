@@ -228,7 +228,7 @@ class line_up_for_shot():
                 agent.controller.throttle = -1
 
         agent.controller.boost = False if abs(angles[1]) > 0.3 or agent.me.airborne else agent.controller.boost
-        agent.controller.handbrake = True if within_turn_radius(agent.me, self.target_location) and not is_on_wall(agent.me) else agent.controller.handbrake
+        agent.controller.handbrake = True if within_turn_radius(agent.me, self.target_location) and not is_on_wall(agent.me) and abs(agent.me.angular_velocity[2]) > 0.3 else agent.controller.handbrake
         agent.controller.throttle = 0.5 if agent.controller.handbrake else agent.controller.throttle
 
         agent.line(agent.me.location, self.target_location)
@@ -254,7 +254,7 @@ class shoot():
         self.counter = 0
         self.p = 0
         self.y = 0
-        self.accuracy = cap(extra_time, 0, 1)
+        self.accuracy = cap(extra_time, -1, 1)
     def update(self, ball_location, intercept_time, shot_vector, direction):
         self.ball_location = ball_location
         self.shot_vector = shot_vector
@@ -371,7 +371,7 @@ class double_jump():
         self.jumping = False
         self.counter = 0
         self.time_of_jump = -1
-        self.accuracy = cap(extra_time, 0, 1)
+        self.accuracy = cap(extra_time, -1, 1)
     def update(self, ball_location, intercept_time, shot_vector, direction):
         self.ball_location = ball_location
         self.shot_vector = shot_vector
@@ -456,7 +456,7 @@ class wall_hit():
         self.counter = 0
         self.p = 0
         self.y = 0
-        self.accuracy = cap(extra_time, 0, 1)
+        self.accuracy = cap(extra_time, -1, 1)
     def update(self, ball_location, intercept_time, shot_vector, direction):
         self.ball_location = ball_location
         self.shot_vector = shot_vector

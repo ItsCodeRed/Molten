@@ -141,6 +141,7 @@ class car_object:
         self.team = 0
         self.intercept = 0
         self.eta = 0
+        self.ready = True
         if packet != None:
             self.update(packet)
     def local(self,value):

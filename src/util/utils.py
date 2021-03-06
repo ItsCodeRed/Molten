@@ -25,9 +25,7 @@ def is_back(agent, car):
     return goal.distance(car.location) < goal.distance(agent.first_pos) + 300
     
 def challenge_time(agent, car):
-    if car == agent.me or car.state == ActionType.BALL and car.eta > 0:
-        return car.eta
-    return eta(car, agent.first_pos)
+    return car.eta
 
 def eta(car, target=None, direction=None, distance=None):
     if direction != None and distance != None:
